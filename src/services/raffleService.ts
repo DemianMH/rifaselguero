@@ -19,7 +19,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 export interface RaffleData {
   id?: string;
   title: string;
-  description: string; // Guardará HTML del editor
+  description: string;
   price: number;
   images: string[];
   endDate: string;
@@ -109,8 +109,7 @@ export const deleteRaffle = async (id: string) => {
   await deleteDoc(doc(db, "raffles", id));
 };
 
-// --- Tickets y Compra (6 DÍGITOS) ---
-
+// --- Tickets y Compra ---
 export const reserveTickets = async (
   raffleId: string, 
   buyerName: string, 
@@ -124,14 +123,11 @@ export const reserveTickets = async (
     let finalNumbers: string[] = [];
 
     if (manualNumbers && manualNumbers.length > 0) {
-      // Opción A: Números manuales
       finalNumbers = manualNumbers;
       const collision = finalNumbers.some(n => currentTakenNumbers.includes(n));
       if (collision) throw new Error("Uno de los números seleccionados ya fue ganado.");
     } else {
-      // Opción B: Máquina Aleatoria (6 DÍGITOS)
       while (finalNumbers.length < quantity) {
-        // 0 a 999999 -> padStart(6, '0') -> "000123"
         const num = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
         if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) {
           finalNumbers.push(num);
@@ -150,7 +146,6 @@ export const reserveTickets = async (
     });
 
     const raffleRef = doc(db, "raffles", raffleId);
-    
     await updateDoc(raffleRef, {
       takenNumbers: arrayUnion(...finalNumbers),
       ticketsSold: increment(finalNumbers.length) 
@@ -163,10 +158,8 @@ export const reserveTickets = async (
   }
 };
 
-// --- Verificador de Boletos (Por teléfono) ---
 export const getMyTickets = async (phone: string) => {
   try {
-    // Buscamos tickets que coincidan con el teléfono
     const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => doc.data() as TicketData);
@@ -175,7 +168,6 @@ export const getMyTickets = async (phone: string) => {
   }
 };
 
-// ... Admin functions ...
 export const getTickets = async () => {
   try {
     const q = query(collection(db, "tickets"), orderBy("createdAt", "desc"));
@@ -198,28 +190,42 @@ export const cancelTicket = async (ticketId: string, raffleId: string, numbers: 
   });
 };
 
-export const pickWinner = async (raffleId: string) => {
+// --- NUEVO: VALIDAR GANADOR DE LOTERÍA ---
+export const setLotteryWinner = async (raffleId: string, winningNumber: string) => {
   try {
-    const raffleRef = doc(db, "raffles", raffleId);
-    const raffleSnap = await getDoc(raffleRef);
-    if(!raffleSnap.exists()) throw new Error("Rifa no encontrada");
-    const data = raffleSnap.data() as RaffleData;
-    const soldNumbers = data.takenNumbers;
-    if(soldNumbers.length === 0) throw new Error("No hay boletos vendidos");
-    const randomIndex = Math.floor(Math.random() * soldNumbers.length);
-    const winningNumber = soldNumbers[randomIndex];
+    // 1. Buscar si algún ticket tiene ese número
     const ticketsRef = collection(db, "tickets");
-    const q = query(ticketsRef, where("numbers", "array-contains", winningNumber));
+    // Ojo: Buscamos en TODOS los tickets de esa rifa que contengan el número
+    const q = query(
+      ticketsRef, 
+      where("raffleId", "==", raffleId),
+      where("numbers", "array-contains", winningNumber)
+    );
+    
     const querySnapshot = await getDocs(q);
-    let winnerName = "Desconocido";
-    if(!querySnapshot.empty) {
-      winnerName = querySnapshot.docs[0].data().buyerName;
+
+    // 2. Si NO existe venta, retornamos null (Boleto no vendido)
+    if (querySnapshot.empty) {
+      return null; 
     }
+
+    // 3. Si existe, obtenemos los datos del ganador
+    // (Tomamos el primero, aunque por lógica solo debería haber uno)
+    const winnerTicket = querySnapshot.docs[0].data() as TicketData;
+    const winnerName = winnerTicket.buyerName;
+
+    // 4. Finalizamos la rifa
+    const raffleRef = doc(db, "raffles", raffleId);
     await updateDoc(raffleRef, {
       status: 'finished',
       winnerNumber: winningNumber,
       winnerName: winnerName
     });
+
     return { winningNumber, winnerName };
-  } catch (error) { throw error; }
+
+  } catch (error) {
+    console.error("Error validando ganador:", error);
+    throw error;
+  }
 };

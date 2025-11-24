@@ -9,11 +9,11 @@ import {
   approveTicket, 
   cancelTicket, 
   uploadRaffleImage,
-  pickWinner, 
+  setLotteryWinner, // <--- Usamos la nueva función
   RaffleData, 
   TicketData 
 } from "@/services/raffleService";
-import { Plus, Edit, Trash, Check, X, MessageCircle, RefreshCw, Search, Upload, Loader2, Trophy, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash, Check, X, MessageCircle, RefreshCw, Search, Upload, Loader2, Trophy, AlertTriangle, CalendarClock } from "lucide-react";
 import Image from "next/image";
 import TextEditor from "@/components/TextEditor"; 
 
@@ -24,9 +24,15 @@ export default function SecretAdminPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   
+  // Estado Formulario
   const [showForm, setShowForm] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Estado Modal Lotería
+  const [showLotteryModal, setShowLotteryModal] = useState(false);
+  const [lotteryRaffleId, setLotteryRaffleId] = useState<string | null>(null);
+  const [lotteryNumber, setLotteryNumber] = useState("");
 
   const [newRaffle, setNewRaffle] = useState<Partial<RaffleData>>({
     title: "",
@@ -53,6 +59,7 @@ export default function SecretAdminPanel() {
 
   useEffect(() => { loadData(); }, []);
 
+  // ... (Mismos handlers de imagen, reset, save, delete) ...
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setIsUploading(true);
@@ -115,18 +122,43 @@ export default function SecretAdminPanel() {
     }
   };
 
-  const handleFinishRaffle = async (id: string) => {
-    if(confirm("¿Finalizar rifa?")) {
-      try {
-        setIsLoading(true);
-        const result = await pickWinner(id);
-        alert(`¡GANADOR: ${result.winnerName} (${result.winningNumber})!`);
+  // --- NUEVA LÓGICA DE LOTERÍA ---
+  const openLotteryModal = (id: string) => {
+    setLotteryRaffleId(id);
+    setLotteryNumber("");
+    setShowLotteryModal(true);
+  };
+
+  const confirmLotteryWinner = async () => {
+    if (!lotteryNumber || lotteryNumber.length !== 6) return alert("Ingresa los 6 dígitos del premio mayor.");
+    if (!lotteryRaffleId) return;
+
+    setIsLoading(true);
+    try {
+      const result = await setLotteryWinner(lotteryRaffleId, lotteryNumber);
+      
+      if (result) {
+        // CASO: BOLETO VENDIDO
+        alert(`¡TENEMOS GANADOR!\n\nCliente: ${result.winnerName}\nBoleto: ${result.winningNumber}\n\nLa rifa ha finalizado.`);
+        setShowLotteryModal(false);
         loadData();
-      } catch (error) {
-        alert("Error: Revisa que haya vendidos.");
-      } finally {
-        setIsLoading(false);
+      } else {
+        // CASO: BOLETO NO VENDIDO
+        const action = confirm(`⚠️ El número ${lotteryNumber} NO fue vendido.\n\n¿Deseas posponer la rifa y cambiar la fecha?\n(Aceptar = Editar Fecha / Cancelar = No hacer nada)`);
+        if (action) {
+          setShowLotteryModal(false);
+          // Buscamos la rifa para editarla
+          const raffleToEdit = raffles.find(r => r.id === lotteryRaffleId);
+          if (raffleToEdit) {
+            handleEditClick(raffleToEdit); // Abrimos editor
+            alert("Por favor, selecciona una nueva fecha para el sorteo.");
+          }
+        }
       }
+    } catch (error) {
+      alert("Error al procesar ganador.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -151,8 +183,39 @@ export default function SecretAdminPanel() {
     t.buyerPhone.includes(searchTerm)
   ).sort((a, b) => (a.status === 'reserved' ? -1 : 1));
 
+  const isExpired = (dateString: string) => new Date(dateString) < new Date();
+
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 relative">
+      {/* MODAL LOTERÍA */}
+      {showLotteryModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
+            <div className="mx-auto bg-yellow-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+              <Trophy size={32} className="text-yellow-600" />
+            </div>
+            <h3 className="text-2xl font-black text-gray-800 mb-2">Ingresar Ganador</h3>
+            <p className="text-sm text-gray-500 mb-6">Escribe el número del Premio Mayor de la Lotería Nacional (6 dígitos).</p>
+            
+            <input 
+              type="number" 
+              maxLength={6}
+              value={lotteryNumber}
+              onChange={(e) => setLotteryNumber(e.target.value.slice(0,6))}
+              placeholder="Ej: 589210"
+              className="w-full text-center text-3xl font-mono font-black tracking-[0.5em] border-2 border-gray-300 rounded-xl p-4 mb-6 focus:border-blue-900 outline-none"
+            />
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowLotteryModal(false)} className="flex-1 py-3 rounded-lg font-bold text-gray-500 hover:bg-gray-100">Cancelar</button>
+              <button onClick={confirmLotteryWinner} className="flex-1 py-3 rounded-lg font-bold bg-blue-900 text-white hover:bg-blue-800 shadow-lg">
+                Verificar Ganador
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav className="bg-black text-white p-4 border-b-4 border-red-600 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <span className="font-bold text-xl italic text-yellow-400">ADMIN EL GÜERO</span>
@@ -172,32 +235,17 @@ export default function SecretAdminPanel() {
             </div>
 
             {showForm && (
-              <div className="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
+              <div className="bg-white p-6 rounded-xl shadow-xl border border-gray-200 mb-8">
                 <h3 className="font-bold text-lg mb-4 text-blue-900">{editingId ? "Editar" : "Nueva"} Rifa</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  
-                  {/* CAMBIO: AHORA TIENEN ETIQUETAS VISIBLES */}
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-500 uppercase">Título del Premio</label>
-                    <input 
-                      value={newRaffle.title} 
-                      onChange={e => setNewRaffle({...newRaffle, title: e.target.value})} 
-                      placeholder="Ej. Aveo 2025" 
-                      className="w-full border p-2 rounded" 
-                    />
+                    <input value={newRaffle.title} onChange={e => setNewRaffle({...newRaffle, title: e.target.value})} placeholder="Ej. Aveo 2025" className="w-full border p-2 rounded" />
                   </div>
-
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-500 uppercase">Precio del Boleto</label>
-                    <input 
-                      type="number" 
-                      value={newRaffle.price || ''} 
-                      onChange={e => setNewRaffle({...newRaffle, price: +e.target.value})} 
-                      placeholder="Ej. 150" 
-                      className="w-full border p-2 rounded" 
-                    />
+                    <input type="number" value={newRaffle.price || ''} onChange={e => setNewRaffle({...newRaffle, price: +e.target.value})} placeholder="Ej. 150" className="w-full border p-2 rounded" />
                   </div>
-                  
                   <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Galería de Imágenes</label>
                     <input type="file" multiple accept="image/*" onChange={handleImageSelect} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
@@ -209,12 +257,10 @@ export default function SecretAdminPanel() {
                       </div>
                     )}
                   </div>
-
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-xs font-bold text-gray-500 uppercase">Fecha y Hora de Finalización</label>
                     <input type="datetime-local" value={newRaffle.endDate} className="border p-2 rounded w-full" onChange={e => setNewRaffle({...newRaffle, endDate: e.target.value})} />
                   </div>
-
                   <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Descripción (Editor)</label>
                     <TextEditor value={newRaffle.description || ""} onChange={(val) => setNewRaffle({...newRaffle, description: val})} />
@@ -229,18 +275,35 @@ export default function SecretAdminPanel() {
 
             <div className="grid gap-4">
               {raffles.map(raffle => (
-                <div key={raffle.id} className="bg-white p-4 rounded-lg shadow border flex flex-col md:flex-row gap-4 items-center">
+                <div key={raffle.id} className={`bg-white p-4 rounded-lg shadow border flex flex-col md:flex-row gap-4 items-center transition ${raffle.status === 'finished' ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
                   <div className="w-24 h-24 relative bg-gray-100 rounded shrink-0">
                     {raffle.images?.[0] && <Image src={raffle.images[0]} alt="img" fill className="object-cover rounded" />}
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg">{raffle.title}</h3>
+                    <div className="flex items-center gap-2">
+                       <h3 className="font-bold text-lg">{raffle.title}</h3>
+                       {raffle.status === 'active' && isExpired(raffle.endDate) && <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><AlertTriangle size={10} /> VENCIDA</span>}
+                    </div>
                     <div className="text-sm text-gray-500 line-clamp-1" dangerouslySetInnerHTML={{__html: raffle.description}} />
                     <p className="text-xs font-bold text-blue-600 mt-1">${raffle.price} | {raffle.takenNumbers?.length || 0} vendidos</p>
+                    
+                    {raffle.status === 'finished' && (
+                      <div className="mt-1 text-green-700 text-xs font-bold">
+                        🏆 Ganó: {raffle.winnerName} ({raffle.winnerNumber})
+                      </div>
+                    )}
                   </div>
+                  
                   <div className="flex flex-col gap-2">
-                    {raffle.status === 'active' && <button onClick={() => handleFinishRaffle(raffle.id!)} className="bg-yellow-400 px-3 py-1 rounded text-xs font-bold">Finalizar</button>}
-                    <div className="flex gap-2">
+                    {raffle.status === 'active' && (
+                      <button 
+                        onClick={() => openLotteryModal(raffle.id!)}
+                        className="bg-yellow-400 hover:bg-yellow-500 text-black px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1"
+                      >
+                        <Trophy size={14} /> Ingresar Ganador
+                      </button>
+                    )}
+                    <div className="flex gap-2 justify-end">
                       <button onClick={() => handleEditClick(raffle)} className="p-2 bg-blue-50 text-blue-600 rounded"><Edit size={16}/></button>
                       <button onClick={() => handleDeleteRaffle(raffle.id!)} className="p-2 bg-red-50 text-red-600 rounded"><Trash size={16}/></button>
                     </div>
