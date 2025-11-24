@@ -1,2 +1,30 @@
 @import "tailwindcss";
 
+:root {
+  --color-racing-blue: #0f2c90;
+  --color-racing-red: #e62315;
+  --color-racing-yellow: #facc15;
+  --color-racing-black: #0a0a0a;
+  --color-racing-silver: #e5e7eb;
+}
+
+@theme {
+  --color-primary: var(--color-racing-blue);
+  --color-secondary: var(--color-racing-red);
+  --color-accent: var(--color-racing-yellow);
+  --color-dark: var(--color-racing-black);
+  --color-light: var(--color-racing-silver);
+  
+  --animate-wiggle: wiggle 1s ease-in-out infinite;
+  
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(-3deg); }
+    50% { transform: rotate(3deg); }
+  }
+}
+
+body {
+  background-color: #f3f4f6;
+  color: var(--color-racing-black);
+  font-family: system-ui, -apple-system, sans-serif;
+}
