@@ -7,6 +7,7 @@ import {
   getDoc, 
   updateDoc, 
   deleteDoc,
+  setDoc, // Nuevo
   query,
   orderBy,
   where,
@@ -16,6 +17,7 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
+// --- Interfaces ---
 export interface RaffleData {
   id?: string;
   title: string;
@@ -41,6 +43,11 @@ export interface TicketData {
   createdAt: any;
 }
 
+export interface HomeConfig {
+  title: string;
+  content: string; // HTML del editor
+}
+
 // --- Storage ---
 export const uploadRaffleImage = async (file: File): Promise<string> => {
   try {
@@ -49,6 +56,34 @@ export const uploadRaffleImage = async (file: File): Promise<string> => {
     return await getDownloadURL(snapshot.ref);
   } catch (error) {
     console.error("Error subiendo imagen:", error);
+    throw error;
+  }
+};
+
+// --- CONFIGURACIÓN DEL INICIO (Nuevo) ---
+export const getHomeConfig = async (): Promise<HomeConfig> => {
+  try {
+    const docRef = doc(db, "settings", "home");
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as HomeConfig;
+    }
+    // Default si no existe
+    return {
+      title: "¿Cómo se eligen los ganadores?",
+      content: "<p>Todos nuestros sorteos se realizan en base a los últimos dígitos del <strong>Premio Mayor de la Lotería Nacional</strong>.</p>"
+    };
+  } catch (error) {
+    console.error(error);
+    return { title: "Dinámica", content: "" };
+  }
+};
+
+export const updateHomeConfig = async (data: HomeConfig) => {
+  try {
+    await setDoc(doc(db, "settings", "home"), data);
+  } catch (error) {
+    console.error("Error guardando inicio:", error);
     throw error;
   }
 };
@@ -190,12 +225,9 @@ export const cancelTicket = async (ticketId: string, raffleId: string, numbers: 
   });
 };
 
-// --- NUEVO: VALIDAR GANADOR DE LOTERÍA ---
 export const setLotteryWinner = async (raffleId: string, winningNumber: string) => {
   try {
-    // 1. Buscar si algún ticket tiene ese número
     const ticketsRef = collection(db, "tickets");
-    // Ojo: Buscamos en TODOS los tickets de esa rifa que contengan el número
     const q = query(
       ticketsRef, 
       where("raffleId", "==", raffleId),
@@ -204,17 +236,13 @@ export const setLotteryWinner = async (raffleId: string, winningNumber: string) 
     
     const querySnapshot = await getDocs(q);
 
-    // 2. Si NO existe venta, retornamos null (Boleto no vendido)
     if (querySnapshot.empty) {
       return null; 
     }
 
-    // 3. Si existe, obtenemos los datos del ganador
-    // (Tomamos el primero, aunque por lógica solo debería haber uno)
     const winnerTicket = querySnapshot.docs[0].data() as TicketData;
     const winnerName = winnerTicket.buyerName;
 
-    // 4. Finalizamos la rifa
     const raffleRef = doc(db, "raffles", raffleId);
     await updateDoc(raffleRef, {
       status: 'finished',
@@ -228,4 +256,9 @@ export const setLotteryWinner = async (raffleId: string, winningNumber: string) 
     console.error("Error validando ganador:", error);
     throw error;
   }
+};
+
+// Mantenemos pickWinner para compatibilidad
+export const pickWinner = async (raffleId: string) => {
+  return null; 
 };

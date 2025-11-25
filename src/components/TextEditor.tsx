@@ -1,8 +1,8 @@
 "use client";
 import dynamic from 'next/dynamic';
-import 'react-quill-new/dist/quill.snow.css'; // CAMBIO: Importación de estilos nueva
+import 'react-quill-new/dist/quill.snow.css'; // <--- OJO: Importación nueva
 
-// CAMBIO: Importamos desde 'react-quill-new'
+// Cargamos la versión compatible con React 19
 const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
 
 interface TextEditorProps {
