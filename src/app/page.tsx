@@ -8,7 +8,7 @@ import Image from "next/image";
 import TicketVerifier from "@/components/TicketVerifier";
 import EventCalendar from "@/components/EventCalendar"; 
 
-// Componente Acordeón para Preguntas (Diseño limpio)
+// Componente Acordeón para Preguntas
 const FAQAccordionItem = ({ question, answer }: { question: string, answer: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   return (
@@ -39,10 +39,18 @@ function HomeContent() {
   const [raffles, setRaffles] = useState<RaffleData[]>([]);
   const [featuredRaffle, setFeaturedRaffle] = useState<RaffleData | null>(null);
   const [sections, setSections] = useState<HomeSection[]>([]);
-  // Inicializamos settings para evitar errores si Firebase tarda en responder
+  
+  // CORRECCIÓN AQUÍ: Agregamos 'maintenanceMode: false'
   const [settings, setSettings] = useState<GlobalSettings>({ 
-    backgroundColor: "#f3f4f6", whatsapp: "3326269409", terms: "", paymentMethods: "", contactInfo: "", faqs: [] 
+    backgroundColor: "#f3f4f6", 
+    whatsapp: "3326269409", 
+    terms: "", 
+    paymentMethods: "", 
+    contactInfo: "", 
+    faqs: [],
+    maintenanceMode: false // <--- ESTO FALTABA
   });
+  
   const [bgStyle, setBgStyle] = useState({});
 
   useEffect(() => {
@@ -64,7 +72,7 @@ function HomeContent() {
         const active = r.filter(x => x.status === 'active');
         if(active.length > 0) setFeaturedRaffle(active[0]);
       } catch (error) {
-        console.error("Error cargando datos:", error);
+        console.error("Error cargando datos del home:", error);
       }
     };
     fetchData();
@@ -87,7 +95,7 @@ function HomeContent() {
 
       <div className="flex-grow max-w-6xl w-full mx-auto py-6 md:py-10 px-4 space-y-10 md:space-y-16">
         
-        {/* VERIFICADOR DE BOLETOS (CORREGIDO: Margen positivo para que no se corte) */}
+        {/* VERIFICADOR DE BOLETOS */}
         <div className="mt-4 md:mt-8 relative z-20 shadow-2xl rounded-2xl overflow-hidden border border-gray-200 bg-white">
           <TicketVerifier />
         </div>
@@ -120,14 +128,12 @@ function HomeContent() {
           </div>
         </div>
 
-        {/* BLOQUES DINÁMICOS (HTML, Calendario, FAQ) */}
+        {/* BLOQUES DINÁMICOS */}
         {sections.map((sec) => (
           <div key={sec.id} className="bg-white/90 backdrop-blur p-6 md:p-10 rounded-3xl shadow-xl border border-white/50 overflow-hidden">
             
-            {/* BLOQUE DE TEXTO (HTML) */}
             {sec.type === 'html' && <div className="prose max-w-none text-gray-700 overflow-x-auto" dangerouslySetInnerHTML={{__html: sec.content || ""}} />}
             
-            {/* BLOQUE DE CALENDARIO */}
             {sec.type === 'calendar' && (
               <div className="flex flex-col items-center w-full">
                 <h3 className="text-2xl md:text-3xl font-black text-blue-900 mb-6 flex items-center gap-3 text-center"><Calendar className="text-red-500" size={28}/> Calendario</h3>
@@ -137,7 +143,6 @@ function HomeContent() {
               </div>
             )}
 
-            {/* BLOQUE DE PREGUNTAS FRECUENTES */}
             {sec.type === 'faq' && (
               <div id="preguntas-frecuentes">
                 <h3 className="text-2xl md:text-3xl font-black text-blue-900 mb-8 flex items-center gap-3 justify-center"><HelpCircle className="text-yellow-500" size={28}/> Preguntas Frecuentes</h3>
@@ -151,7 +156,7 @@ function HomeContent() {
                   </div>
                 ) : (
                   <div className="text-center p-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                    <p className="text-gray-400 italic">No hay preguntas configuradas. Ve al Admin - Pestaña Inicio y agrega el bloque FAQ.</p>
+                    <p className="text-gray-400 italic">No hay preguntas frecuentes configuradas en este momento.</p>
                   </div>
                 )}
               </div>
@@ -159,7 +164,7 @@ function HomeContent() {
           </div>
         ))}
 
-        {/* SECCIONES GLOBALES (Siempre visibles al final) */}
+        {/* SECCIONES GLOBALES */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {settings?.paymentMethods && (
             <div id="metodos-pago" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden">
@@ -182,7 +187,6 @@ function HomeContent() {
           </div>
         )}
 
-        {/* BOTÓN DE WHATSAPP FINAL */}
         <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-3xl p-8 md:p-10 text-center text-white shadow-2xl relative overflow-hidden">
           <h2 className="text-2xl md:text-5xl font-black italic uppercase mb-4 relative z-10">¿Listo para ganar?</h2>
           <a href={`https://wa.me/52${settings?.whatsapp}`} target="_blank" className="inline-flex items-center gap-3 bg-white text-green-600 px-6 py-3 md:px-8 md:py-4 rounded-full font-black text-lg md:text-xl shadow-lg hover:bg-gray-100 transition animate-bounce relative z-10">
