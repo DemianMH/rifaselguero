@@ -1,23 +1,12 @@
 import { db, storage } from "@/lib/firebase";
 import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  getDoc, 
-  updateDoc, 
-  deleteDoc,
-  setDoc, // Nuevo
-  query,
-  orderBy,
-  where,
-  arrayUnion,
-  arrayRemove,
-  increment 
+  collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, setDoc, 
+  query, orderBy, where, arrayUnion, arrayRemove, increment 
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-// --- Interfaces ---
+export interface Promotion { buy: number; get: number; }
+
 export interface RaffleData {
   id?: string;
   title: string;
@@ -30,6 +19,9 @@ export interface RaffleData {
   takenNumbers: string[];
   winnerNumber?: string;
   winnerName?: string;
+  digitCount: number;
+  promotions: Promotion[];
+  imageFit: 'cover' | 'contain';
 }
 
 export interface TicketData {
@@ -38,227 +30,107 @@ export interface TicketData {
   buyerName: string;
   buyerPhone: string;
   numbers: string[];
+  paidCount: number;
   total: number;
   status: 'reserved' | 'sold';
   createdAt: any;
 }
 
-export interface HomeConfig {
-  title: string;
-  content: string; // HTML del editor
+export interface HomeSection {
+  id: string;
+  type: 'html' | 'calendar' | 'faq';
+  content?: string;
+  data?: any;
+  order: number;
 }
 
-// --- Storage ---
-export const uploadRaffleImage = async (file: File): Promise<string> => {
+export interface FAQItem {
+  question: string;
+  answer: string;
+}
+
+export interface GlobalSettings {
+  backgroundColor: string;
+  backgroundImage?: string;
+  whatsapp: string;
+  terms: string;
+  paymentMethods: string;
+  contactInfo: string;
+  faqs: FAQItem[];
+  maintenanceMode: boolean; // <--- NUEVO CAMPO
+}
+
+// --- Funciones ---
+export const uploadImage = async (file: File, path: string = 'raffles'): Promise<string> => {
   try {
-    const storageRef = ref(storage, `raffles/${Date.now()}_${file.name}`);
+    const storageRef = ref(storage, `${path}/${Date.now()}_${file.name}`);
     const snapshot = await uploadBytes(storageRef, file);
     return await getDownloadURL(snapshot.ref);
-  } catch (error) {
-    console.error("Error subiendo imagen:", error);
-    throw error;
-  }
+  } catch (error) { throw error; }
 };
 
-// --- CONFIGURACIÓN DEL INICIO (Nuevo) ---
-export const getHomeConfig = async (): Promise<HomeConfig> => {
+export const getGlobalSettings = async (): Promise<GlobalSettings> => {
   try {
-    const docRef = doc(db, "settings", "home");
+    const docRef = doc(db, "settings", "global");
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data() as HomeConfig;
-    }
-    // Default si no existe
-    return {
-      title: "¿Cómo se eligen los ganadores?",
-      content: "<p>Todos nuestros sorteos se realizan en base a los últimos dígitos del <strong>Premio Mayor de la Lotería Nacional</strong>.</p>"
+    if (docSnap.exists()) return docSnap.data() as GlobalSettings;
+    return { 
+      backgroundColor: "#f3f4f6", 
+      whatsapp: "3326269409", 
+      terms: "", 
+      paymentMethods: "", 
+      contactInfo: "", 
+      faqs: [],
+      maintenanceMode: false 
     };
-  } catch (error) {
-    console.error(error);
-    return { title: "Dinámica", content: "" };
+  } catch (error) { 
+    return { 
+      backgroundColor: "#f3f4f6", 
+      whatsapp: "3326269409", 
+      terms: "", 
+      paymentMethods: "", 
+      contactInfo: "", 
+      faqs: [],
+      maintenanceMode: false 
+    }; 
   }
 };
 
-export const updateHomeConfig = async (data: HomeConfig) => {
-  try {
-    await setDoc(doc(db, "settings", "home"), data);
-  } catch (error) {
-    console.error("Error guardando inicio:", error);
-    throw error;
-  }
+export const updateGlobalSettings = async (data: GlobalSettings) => {
+  await setDoc(doc(db, "settings", "global"), data);
 };
 
-// --- CRUD Rifas ---
-export const createRaffle = async (data: RaffleData) => {
+export const getHomeSections = async (): Promise<HomeSection[]> => {
   try {
-    const docRef = await addDoc(collection(db, "raffles"), {
-      ...data,
-      createdAt: new Date(),
-      ticketsSold: 0,
-      takenNumbers: []
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error("Error creando:", error);
-    throw error;
-  }
-};
-
-export const updateRaffle = async (id: string, data: Partial<RaffleData>) => {
-  try {
-    const docRef = doc(db, "raffles", id);
-    await updateDoc(docRef, data);
-  } catch (error) {
-    console.error("Error actualizando:", error);
-    throw error;
-  }
-};
-
-export const getRaffles = async () => {
-  try {
-    const q = query(collection(db, "raffles"), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as RaffleData[];
-  } catch (error) {
-    return [];
-  }
-};
-
-export const getRaffleById = async (id: string) => {
-  try {
-    const docRef = doc(db, "raffles", id);
+    const docRef = doc(db, "settings", "home_sections");
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as RaffleData;
-    }
-    return null;
-  } catch (error) {
-    return null;
-  }
-};
-
-export const deleteRaffle = async (id: string) => {
-  await deleteDoc(doc(db, "raffles", id));
-};
-
-// --- Tickets y Compra ---
-export const reserveTickets = async (
-  raffleId: string, 
-  buyerName: string, 
-  buyerPhone: string, 
-  quantity: number, 
-  price: number,
-  currentTakenNumbers: string[],
-  manualNumbers?: string[] 
-) => {
-  try {
-    let finalNumbers: string[] = [];
-
-    if (manualNumbers && manualNumbers.length > 0) {
-      finalNumbers = manualNumbers;
-      const collision = finalNumbers.some(n => currentTakenNumbers.includes(n));
-      if (collision) throw new Error("Uno de los números seleccionados ya fue ganado.");
-    } else {
-      while (finalNumbers.length < quantity) {
-        const num = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-        if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) {
-          finalNumbers.push(num);
-        }
-      }
-    }
-
-    const ticketRef = await addDoc(collection(db, "tickets"), {
-      raffleId,
-      buyerName,
-      buyerPhone,
-      numbers: finalNumbers,
-      total: finalNumbers.length * price,
-      status: 'reserved',
-      createdAt: new Date()
-    });
-
-    const raffleRef = doc(db, "raffles", raffleId);
-    await updateDoc(raffleRef, {
-      takenNumbers: arrayUnion(...finalNumbers),
-      ticketsSold: increment(finalNumbers.length) 
-    });
-
-    return { id: ticketRef.id, numbers: finalNumbers };
-  } catch (error) {
-    console.error("Error reservando:", error);
-    throw error;
-  }
-};
-
-export const getMyTickets = async (phone: string) => {
-  try {
-    const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => doc.data() as TicketData);
-  } catch (error) {
+    if (docSnap.exists()) return (docSnap.data().sections as HomeSection[]).sort((a, b) => a.order - b.order);
     return [];
-  }
-};
-
-export const getTickets = async () => {
-  try {
-    const q = query(collection(db, "tickets"), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as TicketData[];
   } catch (error) { return []; }
 };
 
-export const approveTicket = async (ticketId: string) => {
-  const ticketRef = doc(db, "tickets", ticketId);
-  await updateDoc(ticketRef, { status: 'sold' });
+export const updateHomeSections = async (sections: HomeSection[]) => {
+  await setDoc(doc(db, "settings", "home_sections"), { sections });
 };
 
-export const cancelTicket = async (ticketId: string, raffleId: string, numbers: string[]) => {
-  await deleteDoc(doc(db, "tickets", ticketId));
-  const raffleRef = doc(db, "raffles", raffleId);
-  await updateDoc(raffleRef, {
-    takenNumbers: arrayRemove(...numbers),
-    ticketsSold: increment(-numbers.length)
-  });
+export const createRaffle = async (data: RaffleData) => { const docRef = await addDoc(collection(db, "raffles"), { ...data, createdAt: new Date(), ticketsSold: 0, takenNumbers: [] }); return docRef.id; };
+export const updateRaffle = async (id: string, data: Partial<RaffleData>) => { const docRef = doc(db, "raffles", id); await updateDoc(docRef, data); };
+export const getRaffles = async () => { const q = query(collection(db, "raffles"), orderBy("createdAt", "desc")); const snap = await getDocs(q); return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as RaffleData[]; };
+export const getRaffleById = async (id: string) => { const docRef = doc(db, "raffles", id); const snap = await getDoc(docRef); return snap.exists() ? { id: snap.id, ...snap.data() } as RaffleData : null; };
+export const deleteRaffle = async (id: string) => { await deleteDoc(doc(db, "raffles", id)); };
+export const getTickets = async () => { const q = query(collection(db, "tickets"), orderBy("createdAt", "desc")); const snap = await getDocs(q); return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as TicketData[]; };
+export const approveTicket = async (id: string) => updateDoc(doc(db, "tickets", id), { status: 'sold' });
+export const cancelTicket = async (id: string, rId: string, nums: string[]) => { await deleteDoc(doc(db, "tickets", id)); await updateDoc(doc(db, "raffles", rId), { takenNumbers: arrayRemove(...nums), ticketsSold: increment(-nums.length) }); };
+export const setLotteryWinner = async (raffleId: string, winningNumber: string) => { const q = query(collection(db, "tickets"), where("raffleId", "==", raffleId), where("numbers", "array-contains", winningNumber)); const snap = await getDocs(q); if (snap.empty) return null; const winner = snap.docs[0].data() as TicketData; await updateDoc(doc(db, "raffles", raffleId), { status: 'finished', winnerNumber: winningNumber, winnerName: winner.buyerName }); return { winningNumber, winnerName: winner.buyerName }; };
+export const pickWinner = async () => { return null; };
+export const uploadRaffleImage = uploadImage;
+export const reserveTickets = async (raffleId: string, buyerName: string, buyerPhone: string, quantityPaid: number, price: number, currentTakenNumbers: string[], digitCount: number, manualNumbers?: string[], promotions?: Promotion[]) => {
+  let finalNumbers: string[] = [];
+  let totalTicketsToGenerate = quantityPaid;
+  if (promotions && promotions.length > 0) { promotions.forEach(promo => { if (quantityPaid >= promo.buy) { const multiplier = Math.floor(quantityPaid / promo.buy); totalTicketsToGenerate += (promo.get * multiplier); } }); }
+  if (manualNumbers && manualNumbers.length > 0) { finalNumbers = manualNumbers; if(finalNumbers.some(n => currentTakenNumbers.includes(n))) throw new Error("Número ocupado"); } else { const limit = Math.pow(10, digitCount); while (finalNumbers.length < totalTicketsToGenerate) { const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0'); if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) { finalNumbers.push(num); } } }
+  const ticketRef = await addDoc(collection(db, "tickets"), { raffleId, buyerName, buyerPhone, numbers: finalNumbers, paidCount: quantityPaid, total: quantityPaid * price, status: 'reserved', createdAt: new Date() });
+  const raffleRef = doc(db, "raffles", raffleId); await updateDoc(raffleRef, { takenNumbers: arrayUnion(...finalNumbers), ticketsSold: increment(finalNumbers.length) });
+  return { id: ticketRef.id, numbers: finalNumbers, total: quantityPaid * price };
 };
-
-export const setLotteryWinner = async (raffleId: string, winningNumber: string) => {
-  try {
-    const ticketsRef = collection(db, "tickets");
-    const q = query(
-      ticketsRef, 
-      where("raffleId", "==", raffleId),
-      where("numbers", "array-contains", winningNumber)
-    );
-    
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot.empty) {
-      return null; 
-    }
-
-    const winnerTicket = querySnapshot.docs[0].data() as TicketData;
-    const winnerName = winnerTicket.buyerName;
-
-    const raffleRef = doc(db, "raffles", raffleId);
-    await updateDoc(raffleRef, {
-      status: 'finished',
-      winnerNumber: winningNumber,
-      winnerName: winnerName
-    });
-
-    return { winningNumber, winnerName };
-
-  } catch (error) {
-    console.error("Error validando ganador:", error);
-    throw error;
-  }
-};
-
-// Mantenemos pickWinner para compatibilidad
-export const pickWinner = async (raffleId: string) => {
-  return null; 
-};
+export const getMyTickets = async (phone: string) => { const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); const snap = await getDocs(q); return snap.docs.map(doc => doc.data() as TicketData); };
