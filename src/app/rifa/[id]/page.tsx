@@ -163,7 +163,10 @@ export default function RaffleDetail() {
                     ))}
                     <input type="number" placeholder="Otro" value={customQuantity} onChange={e=>{setCustomQuantity(e.target.value); setMachineQuantity(+e.target.value)}} className="w-16 md:w-20 border p-2 rounded text-center font-bold text-sm"/>
                   </div>
-                  <SlotMachine quantity={1} digitCount={raffle.digitCount||4} takenNumbers={[]} onGenerate={()=>{}} />
+                  <SlotMachine quantity={machineQuantity} 
+                    digitCount={raffle.digitCount||4} 
+                    takenNumbers={raffle.takenNumbers || []} 
+                    onGenerate={setMachineNumbers} />
                 </div>
               ) : (
                 <div className="space-y-4">
