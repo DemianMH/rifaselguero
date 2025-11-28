@@ -1,24 +1,48 @@
 "use client";
 import { useState } from "react";
-import { getMyTickets, TicketData } from "@/services/raffleService";
+import { getMyTickets, getRaffleById, TicketData } from "@/services/raffleService"; // Agregamos getRaffleById
 import { Ticket, Search, Printer } from "lucide-react";
+
+// Extendemos la interfaz para incluir datos visuales en el recibo
+interface TicketWithRaffleInfo extends TicketData {
+  raffleTitle?: string;
+  raffleImage?: string;
+}
 
 export default function TicketVerifier() {
   const [phone, setPhone] = useState("");
-  const [tickets, setTickets] = useState<TicketData[] | null>(null);
+  const [tickets, setTickets] = useState<TicketWithRaffleInfo[] | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phone.length < 10) return alert("Ingresa un número válido de 10 dígitos");
     setLoading(true);
-    const results = await getMyTickets(phone);
-    setTickets(results);
-    setLoading(false);
+    
+    try {
+      // 1. Obtenemos los tickets
+      const results = await getMyTickets(phone);
+      
+      // 2. Buscamos la información de la rifa para cada ticket (Imagen y Título)
+      const enrichedTickets = await Promise.all(results.map(async (ticket) => {
+        const raffleData = await getRaffleById(ticket.raffleId);
+        return {
+          ...ticket,
+          raffleTitle: raffleData?.title || "Sorteo Especial",
+          raffleImage: raffleData?.images?.[0] || "" // Tomamos solo la primera foto
+        };
+      }));
+
+      setTickets(enrichedTickets);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Función para generar el recibo
-  const openReceipt = (t: TicketData) => {
+  const openReceipt = (t: TicketWithRaffleInfo) => {
     const statusColor = t.status === 'sold' ? '#166534' : '#ca8a04'; 
     const statusText = t.status === 'sold' ? 'PAGADO' : 'PENDIENTE DE PAGO';
     const borderColor = t.status === 'sold' ? '#22c55e' : '#eab308';
@@ -31,11 +55,17 @@ export default function TicketVerifier() {
             @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
             body { font-family: 'Courier Prime', monospace; background: #555; display: flex; justify-content: center; padding: 20px; margin: 0; min-height: 100vh; align-items: center; }
             .receipt { background: white; width: 100%; max-width: 450px; padding: 40px; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-top: 12px solid ${borderColor}; overflow: hidden; }
-            .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 120%; max-width: none; opacity: 0.07; z-index: 0; pointer-events: none; filter: grayscale(100%); }
+            .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 120%; max-width: none; opacity: 0.05; z-index: 0; pointer-events: none; filter: grayscale(100%); }
             .content { position: relative; z-index: 1; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px dashed #ccc; padding-bottom: 20px; }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px dashed #ccc; padding-bottom: 20px; }
             .title { font-size: 24px; font-weight: bold; margin-bottom: 5px; color: #000; }
             .subtitle { font-size: 14px; color: #666; }
+            
+            /* IMAGEN DEL PRODUCTO */
+            .product-img-container { text-align: center; margin-bottom: 20px; }
+            .product-img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd; }
+            .raffle-name { font-size: 18px; font-weight: bold; text-align: center; margin: 10px 0 20px 0; text-transform: uppercase; color: #1e3a8a; }
+
             .info-group { margin-bottom: 15px; }
             .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; }
             .value { font-size: 17px; font-weight: bold; color: #222; border-bottom: 1px dotted #ddd; padding-bottom: 2px;}
@@ -57,18 +87,33 @@ export default function TicketVerifier() {
         <body>
           <div class="receipt">
             <img src="/logo.jpg" class="watermark" />
+            
             <div class="content">
-              <div class="header"><div class="title">RIFAS EL GÜERO</div><div class="subtitle">Comprobante Oficial de Participación</div></div>
+              <div class="header">
+                <div class="title">RIFAS EL GÜERO</div>
+                <div class="subtitle">Comprobante Oficial de Participación</div>
+              </div>
+
+              ${t.raffleImage ? `<div class="product-img-container"><img src="${t.raffleImage}" class="product-img" /></div>` : ''}
+              <div class="raffle-name">${t.raffleTitle}</div>
               <div class="info-group"><div class="label">CLIENTE TITULAR</div><div class="value" style="font-size: 20px;">${t.buyerName}</div></div>
+              
               <div style="display: flex; gap: 20px;">
                  <div class="info-group" style="flex: 1;"><div class="label">TELÉFONO</div><div class="value">${t.buyerPhone}</div></div>
+                 <div class="info-group" style="flex: 1; text-align: right;"><div class="label">FOLIO</div><div class="value" style="font-family: monospace;">#${t.id?.slice(0, 6).toUpperCase()}</div></div>
               </div>
+
                <div class="info-group"><div class="label">FECHA DE EMISIÓN</div><div class="value">${new Date(t.createdAt.seconds * 1000).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div></div>
+
               <div class="label" style="text-align:center; margin-top:25px; font-size: 14px;">TUS BOLETOS SELECCIONADOS</div>
               <div class="numbers-box">${t.numbers.map(n => `<span class="number-tag">${n}</span>`).join('')}</div>
+
               <div class="total-section"><span class="total-label">IMPORTE TOTAL:</span><span class="total-amount">$${t.total.toFixed(2)} MXN</span></div>
+
               <div class="stamp-container"><div class="stamp">${statusText}</div></div>
+
               <div class="footer"><p>Este documento digital es su comprobante oficial de participación en la rifa.<br/>Consérvelo para cualquier reclamación.</p><p>www.rifaselguero.com | Zapopan, Jalisco</p></div>
+
               <div class="download-btn-container no-print">
                 <button class="download-btn" onclick="window.print()">DESCARGAR RECIBO</button>
                 <div class="download-hint">(Selecciona "Guardar como PDF")</div>
@@ -78,7 +123,13 @@ export default function TicketVerifier() {
         </body>
       </html>
     `;
-    const win = window.open('', '_blank');
+    
+    const width = 500;
+    const height = 700;
+    const left = (window.screen.width / 2) - (width / 2);
+    const top = (window.screen.height / 2) - (height / 2);
+    
+    const win = window.open('', '_blank', `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`);
     win?.document.write(htmlContent);
     win?.document.close();
   };
@@ -86,18 +137,24 @@ export default function TicketVerifier() {
   return (
     <div className="w-full">
       <div className="bg-red-600 p-4 md:p-6 text-center text-white">
-        <h3 className="font-black text-xl md:text-3xl uppercase italic mb-2 flex items-center justify-center gap-2"><Search size={24}/> Verificador de Boletos</h3>
+        <h3 className="font-black text-xl md:text-3xl uppercase italic mb-2 flex items-center justify-center gap-2">
+           <Search size={24}/> Verificador de Boletos
+        </h3>
         <p className="text-white/90 text-sm md:text-base">Ingresa tu número de celular para descargar tus comprobantes.</p>
       </div>
+      
       <div className="p-6 md:p-8 bg-white">
         <form onSubmit={handleCheck} className="flex flex-col md:flex-row gap-4">
           <input type="tel" placeholder="Tu celular (Ej. 3312345678)" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full flex-1 border-2 border-gray-300 rounded-xl p-3 md:p-4 text-lg focus:border-red-600 outline-none text-gray-800 font-bold text-center" />
           <button type="submit" className="w-full md:w-auto bg-black text-white font-bold px-8 py-3 md:py-4 rounded-xl hover:bg-gray-900 transition shadow-lg transform active:scale-95">{loading ? "Buscando..." : "Consultar"}</button>
         </form>
+
         {tickets && (
           <div className="mt-8 animate-in fade-in slide-in-from-bottom-4">
             {tickets.length === 0 ? (
-              <div className="text-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300"><p className="text-gray-500 font-bold">No encontramos boletos con ese número.</p></div>
+              <div className="text-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                <p className="text-gray-500 font-bold">No encontramos boletos con ese número.</p>
+              </div>
             ) : (
               <div className="space-y-4">
                 <div className="text-center mb-4"><span className="bg-green-100 text-green-800 px-4 py-1 rounded-full text-sm font-bold shadow-sm">¡Encontramos {tickets.length} orden(es)!</span></div>
@@ -105,11 +162,13 @@ export default function TicketVerifier() {
                   <div key={i} className="border-2 border-gray-100 rounded-xl p-4 hover:border-blue-200 transition bg-white shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
                     <div className="w-full md:w-auto text-center md:text-left">
                       <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 mb-2">
-                        {/* SE ELIMINÓ EL FOLIO AQUÍ */}
-                        <span className="text-xs text-gray-500 font-bold">{new Date(t.createdAt.seconds * 1000).toLocaleDateString()}</span>
+                        <span className="font-bold text-gray-800">Orden #{t.id?.slice(0, 6).toUpperCase()}</span>
+                        <span className="text-xs text-gray-500">({new Date(t.createdAt.seconds * 1000).toLocaleDateString()})</span>
                         <span className={`text-xs font-black px-2 py-0.5 rounded ${t.status === 'sold' ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{t.status === 'sold' ? 'PAGADO' : 'PENDIENTE'}</span>
                       </div>
                       <div className="flex flex-wrap justify-center md:justify-start gap-1">{t.numbers.map(num => (<span key={num} className="bg-gray-50 border border-gray-200 px-2 py-0.5 rounded text-gray-600 font-mono font-bold text-sm">{num}</span>))}</div>
+                      {/* Título de la rifa en la lista de resultados */}
+                      <div className="text-xs text-blue-900 font-bold mt-1">{t.raffleTitle}</div> 
                     </div>
                     <button onClick={() => openReceipt(t)} className="flex items-center gap-2 bg-blue-900 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-800 transition shadow-md whitespace-nowrap"><Printer size={16} /> Ver Recibo</button>
                   </div>
