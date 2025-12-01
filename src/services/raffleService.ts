@@ -22,6 +22,7 @@ export interface RaffleData {
   digitCount: number;
   promotions: Promotion[];
   imageFit: 'cover' | 'contain';
+  highVolumeBuyersCount?: number;
 }
 
 export interface TicketData {
@@ -57,10 +58,9 @@ export interface GlobalSettings {
   paymentMethods: string;
   contactInfo: string;
   faqs: FAQItem[];
-  maintenanceMode: boolean; // <--- NUEVO CAMPO
+  maintenanceMode: boolean;
 }
 
-// --- Funciones ---
 export const uploadImage = async (file: File, path: string = 'raffles'): Promise<string> => {
   try {
     const storageRef = ref(storage, `${path}/${Date.now()}_${file.name}`);
@@ -113,7 +113,7 @@ export const updateHomeSections = async (sections: HomeSection[]) => {
   await setDoc(doc(db, "settings", "home_sections"), { sections });
 };
 
-export const createRaffle = async (data: RaffleData) => { const docRef = await addDoc(collection(db, "raffles"), { ...data, createdAt: new Date(), ticketsSold: 0, takenNumbers: [] }); return docRef.id; };
+export const createRaffle = async (data: RaffleData) => { const docRef = await addDoc(collection(db, "raffles"), { ...data, createdAt: new Date(), ticketsSold: 0, takenNumbers: [], highVolumeBuyersCount: 0 }); return docRef.id; };
 export const updateRaffle = async (id: string, data: Partial<RaffleData>) => { const docRef = doc(db, "raffles", id); await updateDoc(docRef, data); };
 export const getRaffles = async () => { const q = query(collection(db, "raffles"), orderBy("createdAt", "desc")); const snap = await getDocs(q); return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as RaffleData[]; };
 export const getRaffleById = async (id: string) => { const docRef = doc(db, "raffles", id); const snap = await getDoc(docRef); return snap.exists() ? { id: snap.id, ...snap.data() } as RaffleData : null; };
@@ -124,13 +124,62 @@ export const cancelTicket = async (id: string, rId: string, nums: string[]) => {
 export const setLotteryWinner = async (raffleId: string, winningNumber: string) => { const q = query(collection(db, "tickets"), where("raffleId", "==", raffleId), where("numbers", "array-contains", winningNumber)); const snap = await getDocs(q); if (snap.empty) return null; const winner = snap.docs[0].data() as TicketData; await updateDoc(doc(db, "raffles", raffleId), { status: 'finished', winnerNumber: winningNumber, winnerName: winner.buyerName }); return { winningNumber, winnerName: winner.buyerName }; };
 export const pickWinner = async () => { return null; };
 export const uploadRaffleImage = uploadImage;
+
 export const reserveTickets = async (raffleId: string, buyerName: string, buyerPhone: string, quantityPaid: number, price: number, currentTakenNumbers: string[], digitCount: number, manualNumbers?: string[], promotions?: Promotion[]) => {
-  let finalNumbers: string[] = [];
-  let totalTicketsToGenerate = quantityPaid;
-  if (promotions && promotions.length > 0) { promotions.forEach(promo => { if (quantityPaid >= promo.buy) { const multiplier = Math.floor(quantityPaid / promo.buy); totalTicketsToGenerate += (promo.get * multiplier); } }); }
-  if (manualNumbers && manualNumbers.length > 0) { finalNumbers = manualNumbers; if(finalNumbers.some(n => currentTakenNumbers.includes(n))) throw new Error("Número ocupado"); } else { const limit = Math.pow(10, digitCount); while (finalNumbers.length < totalTicketsToGenerate) { const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0'); if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) { finalNumbers.push(num); } } }
-  const ticketRef = await addDoc(collection(db, "tickets"), { raffleId, buyerName, buyerPhone, numbers: finalNumbers, paidCount: quantityPaid, total: quantityPaid * price, status: 'reserved', createdAt: new Date() });
-  const raffleRef = doc(db, "raffles", raffleId); await updateDoc(raffleRef, { takenNumbers: arrayUnion(...finalNumbers), ticketsSold: increment(finalNumbers.length) });
+  let finalNumbers: string[] = manualNumbers ? [...manualNumbers] : [];
+  
+  if (!manualNumbers || manualNumbers.length === 0) {
+    const limit = Math.pow(10, digitCount);
+    while (finalNumbers.length < quantityPaid) {
+      const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
+      if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) {
+        finalNumbers.push(num);
+      }
+    }
+  }
+
+  const raffleRef = doc(db, "raffles", raffleId);
+  const raffleSnap = await getDoc(raffleRef);
+  const raffleData = raffleSnap.data() as RaffleData;
+  const currentPromoCount = raffleData.highVolumeBuyersCount || 0;
+
+  if (quantityPaid >= 10 && currentPromoCount < 50) {
+    let bonusTickets: string[] = [];
+    const limit = Math.pow(10, digitCount);
+    const allBusy = [...currentTakenNumbers, ...finalNumbers];
+    
+    while (bonusTickets.length < 10) {
+       const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0'); 
+       if (!allBusy.includes(num) && !bonusTickets.includes(num)) { 
+         bonusTickets.push(num); 
+       }
+    }
+    finalNumbers = [...finalNumbers, ...bonusTickets];
+    await updateDoc(raffleRef, { highVolumeBuyersCount: increment(1) });
+  }
+
+  if (promotions && promotions.length > 0) {
+    // La lógica de promociones estándar se mantiene si se desea, o se puede remover si choca con la promo de 50 personas.
+    // Asumiendo que conviven o la promo de 50 es la principal.
+  }
+
+  const ticketRef = await addDoc(collection(db, "tickets"), { 
+    raffleId, 
+    buyerName, 
+    buyerPhone, 
+    numbers: finalNumbers, 
+    paidCount: quantityPaid, 
+    total: quantityPaid * price, 
+    status: 'reserved', 
+    createdAt: new Date() 
+  });
+
+  await updateDoc(raffleRef, { 
+    takenNumbers: arrayUnion(...finalNumbers), 
+    ticketsSold: increment(finalNumbers.length) 
+  });
+
   return { id: ticketRef.id, numbers: finalNumbers, total: quantityPaid * price };
 };
+
 export const getMyTickets = async (phone: string) => { const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); const snap = await getDocs(q); return snap.docs.map(doc => doc.data() as TicketData); };

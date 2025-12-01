@@ -8,7 +8,6 @@ import Image from "next/image";
 import TicketVerifier from "@/components/TicketVerifier";
 import EventCalendar from "@/components/EventCalendar"; 
 
-// Componente Acordeón para Preguntas
 const FAQAccordionItem = ({ question, answer }: { question: string, answer: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   return (
@@ -40,7 +39,6 @@ function HomeContent() {
   const [featuredRaffle, setFeaturedRaffle] = useState<RaffleData | null>(null);
   const [sections, setSections] = useState<HomeSection[]>([]);
   
-  // CORRECCIÓN AQUÍ: Agregamos 'maintenanceMode: false'
   const [settings, setSettings] = useState<GlobalSettings>({ 
     backgroundColor: "#f3f4f6", 
     whatsapp: "3326269409", 
@@ -48,7 +46,7 @@ function HomeContent() {
     paymentMethods: "", 
     contactInfo: "", 
     faqs: [],
-    maintenanceMode: false // <--- ESTO FALTABA
+    maintenanceMode: false
   });
   
   const [bgStyle, setBgStyle] = useState({});
@@ -82,9 +80,8 @@ function HomeContent() {
     <div className="min-h-screen flex flex-col overflow-x-hidden" style={bgStyle}>
       <Navbar />
       
-      {/* HERO SECTION */}
       <section className="relative h-[50vh] md:h-[60vh] bg-black overflow-hidden flex-shrink-0">
-        {featuredRaffle?.images?.[0] && <Image src={featuredRaffle.images[0]} alt="" fill className={`object-${featuredRaffle.imageFit || 'cover'} opacity-50`} priority />}
+        {featuredRaffle?.images?.[0] && <Image src={featuredRaffle.images[0]} alt="" fill className="object-cover opacity-50" priority />}
         <div className="relative z-10 h-full flex flex-col justify-center items-center text-white text-center px-4">
           <h1 className="text-4xl md:text-7xl font-black italic uppercase mb-4 md:mb-6 drop-shadow-lg animate-in slide-in-from-bottom-10 duration-700 leading-tight">
             {featuredRaffle?.title || "RIFAS EL GÜERO"}
@@ -95,12 +92,10 @@ function HomeContent() {
 
       <div className="flex-grow max-w-6xl w-full mx-auto py-6 md:py-10 px-4 space-y-10 md:space-y-16">
         
-        {/* VERIFICADOR DE BOLETOS */}
         <div className="mt-4 md:mt-8 relative z-20 shadow-2xl rounded-2xl overflow-hidden border border-gray-200 bg-white">
           <TicketVerifier />
         </div>
 
-        {/* SORTEOS DISPONIBLES */}
         <div className="bg-white/90 backdrop-blur p-6 md:p-8 rounded-3xl shadow-xl border border-white/50">
           <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
             <Flag className="text-red-600 w-6 h-6 md:w-8 md:h-8" />
@@ -110,8 +105,8 @@ function HomeContent() {
             {raffles.map(r => (
               <Link key={r.id} href={r.status==='active' ? `/rifa/${r.id}` : '/ganadores'} className="block group h-full">
                 <div className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 h-full flex flex-col border border-gray-100">
-                  <div className="relative h-48 md:h-56 bg-gray-100">
-                    <Image src={r.images[0]||""} alt="" fill className={`object-${r.imageFit || 'cover'}`}/>
+                  <div className="relative h-48 md:h-56 bg-white border-b border-gray-100">
+                    <Image src={r.images[0]||""} alt="" fill className="object-contain p-2"/>
                     {r.status==='active' && <div className="absolute top-3 right-3 bg-yellow-400 text-black px-3 py-1 rounded-full text-xs font-bold shadow-lg flex items-center gap-1"><Timer size={12}/> EN CURSO</div>}
                   </div>
                   <div className="p-4 md:p-6 flex flex-col flex-1">
@@ -128,7 +123,6 @@ function HomeContent() {
           </div>
         </div>
 
-        {/* BLOQUES DINÁMICOS */}
         {sections.map((sec) => (
           <div key={sec.id} className="bg-white/90 backdrop-blur p-6 md:p-10 rounded-3xl shadow-xl border border-white/50 overflow-hidden">
             
@@ -164,16 +158,15 @@ function HomeContent() {
           </div>
         ))}
 
-        {/* SECCIONES GLOBALES */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
           {settings?.paymentMethods && (
-            <div id="metodos-pago" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden">
+            <div id="metodos-pago" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden h-full">
               <h3 className="text-xl md:text-2xl font-black text-blue-900 mb-4 uppercase">Métodos de Pago</h3>
               <div className="prose text-sm md:text-base text-gray-600 max-w-full overflow-x-auto" dangerouslySetInnerHTML={{__html: settings.paymentMethods}} />
             </div>
           )}
           {settings?.contactInfo && (
-            <div id="contacto" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden">
+            <div id="contacto" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden h-full">
               <h3 className="text-xl md:text-2xl font-black text-blue-900 mb-4 uppercase">Contacto</h3>
               <div className="prose text-sm md:text-base text-gray-600 max-w-full overflow-x-auto" dangerouslySetInnerHTML={{__html: settings.contactInfo}} />
             </div>

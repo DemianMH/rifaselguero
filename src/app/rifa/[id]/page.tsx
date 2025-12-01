@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { getRaffleById, reserveTickets, getGlobalSettings, RaffleData } from "@/services/raffleService";
+import { getRaffleById, reserveTickets, getGlobalSettings, RaffleData, GlobalSettings } from "@/services/raffleService";
 import SlotMachine from "@/components/SlotMachine";
 import { CheckCircle, ShieldCheck, Search, Gift, Lock } from "lucide-react"; 
 import Image from "next/image";
@@ -14,6 +14,7 @@ export default function RaffleDetail() {
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isMaintenance, setIsMaintenance] = useState(false);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings | null>(null);
   
   const [buyMode, setBuyMode] = useState<'machine' | 'manual'>('machine');
   const [machineQuantity, setMachineQuantity] = useState(1);
@@ -35,17 +36,23 @@ export default function RaffleDetail() {
     if (id) {
       Promise.all([getRaffleById(id as string), getGlobalSettings()]).then(([d, s]) => {
         setRaffle(d);
+        setGlobalSettings(s);
         setIsMaintenance(s.maintenanceMode || false);
         setLoading(false);
       });
     }
   }, [id]);
 
-  const getBonusTickets = (qty: number) => {
-    if (!raffle?.promotions) return 0;
-    let bonus = 0;
-    raffle.promotions.forEach(p => { if (qty >= p.buy) bonus += (Math.floor(qty / p.buy) * p.get); });
-    return bonus;
+  const generateRandomNumbers = (qty: number, digits: number, taken: string[]) => {
+    const nums: string[] = [];
+    const limit = Math.pow(10, digits);
+    let attempts = 0;
+    while (nums.length < qty && attempts < 10000) {
+      const n = Math.floor(Math.random() * limit).toString().padStart(digits, '0');
+      if (!taken.includes(n) && !nums.includes(n)) nums.push(n);
+      attempts++;
+    }
+    return nums;
   };
 
   const handleSearch = () => {
@@ -61,6 +68,18 @@ export default function RaffleDetail() {
       attempts++;
     }
     setManualResults(suggestions);
+  };
+
+  const handlePrePurchaseCheck = () => {
+    if (buyMode === 'machine') {
+      if (machineNumbers.length !== machineQuantity) {
+        const autoNumbers = generateRandomNumbers(machineQuantity, raffle?.digitCount || 4, raffle?.takenNumbers || []);
+        setMachineNumbers(autoNumbers);
+      }
+    } else {
+      if (selectedManualNumbers.length === 0) return alert("Selecciona al menos un número manual.");
+    }
+    setShowPaymentModal(true);
   };
 
   const handleConfirm = async () => {
@@ -80,32 +99,42 @@ export default function RaffleDetail() {
     } catch (error) { alert("Error: Números no disponibles"); } finally { setIsProcessing(false); }
   };
 
+  const stripHtml = (html: string) => {
+    if (typeof window === 'undefined') return "";
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  }
+
   if (loading || !raffle) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   
-  const bonusCount = getBonusTickets(buyMode === 'machine' ? machineQuantity : selectedManualNumbers.length);
-  const totalQty = (buyMode === 'machine' ? machineQuantity : selectedManualNumbers.length) + bonusCount;
-  const whatsappMsg = `Hola Rifas El Güero! Aparté boletos.\nRifa: ${raffle.title}\nBoletos (${finalNumbers.length}): ${finalNumbers.join(', ')}\nTotal: $${finalTotal}`;
+  const paymentText = globalSettings?.paymentMethods ? stripHtml(globalSettings.paymentMethods).substring(0, 500) : "Cuenta Bancaria...";
+  const whatsappMsg = `Hola Rifas El Güero! 🎟️\n` +
+    `Quiero apartar boletos para: *${raffle.title}*\n` +
+    `👤 A nombre de: ${buyerName}\n` +
+    `🔢 Boletos (${finalNumbers.length}): ${finalNumbers.join(', ')}\n` +
+    `💰 Total a pagar: *$${finalTotal}*\n\n` +
+    `Realizaré el pago a:\n${paymentText}\n\n` +
+    `Espero confirmación. Gracias!`;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 w-full overflow-x-hidden">
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-8 grid lg:grid-cols-2 gap-6 md:gap-10">
         
-        {/* COLUMNA IZQUIERDA: FOTOS E INFO */}
         <div className="space-y-4 w-full">
-          {/* Imagen Principal (Altura ajustada para móvil) */}
-          <div className="relative h-64 md:h-96 bg-white rounded-2xl shadow-lg overflow-hidden w-full">
+          <div className="relative h-64 md:h-[500px] bg-white rounded-2xl shadow-lg overflow-hidden w-full border border-gray-100 flex items-center justify-center">
             {raffle.images && raffle.images[0] && (
               <Image 
                 src={raffle.images[selectedImageIndex]} 
-                alt="" 
+                alt={raffle.title} 
                 fill 
-                className={`object-${raffle.imageFit || 'cover'}`} 
+                className="object-contain" 
+                priority 
               />
             )}
           </div>
 
-          {/* Galería de Miniaturas (Con wrap para que bajen de línea) */}
           {raffle.images.length > 1 && (
             <div className="flex flex-wrap gap-2 md:gap-3 justify-center md:justify-start">
               {raffle.images.map((img, i) => (
@@ -129,7 +158,6 @@ export default function RaffleDetail() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: COMPRA */}
         <div className={`bg-white p-6 rounded-xl shadow-xl h-fit sticky top-24 border-t-8 w-full ${isMaintenance ? 'border-gray-400' : 'border-red-600'}`}>
           
           {isMaintenance ? (
@@ -140,14 +168,15 @@ export default function RaffleDetail() {
             </div>
           ) : (
             <>
+              <div className="text-center mb-2">
+                <p className="text-blue-900 font-bold uppercase text-sm tracking-widest border-b border-blue-100 pb-2 inline-block">
+                  📅 Juega el: {new Date(raffle.endDate).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute:'2-digit' })}
+                </p>
+              </div>
+
               <div className="text-center mb-6">
                 <span className="text-gray-400 font-bold text-xs uppercase">Precio Boleto</span>
                 <div className="text-4xl md:text-5xl font-black text-red-600">${raffle.price}</div>
-                {raffle.promotions?.map((p,i) => (
-                  <div key={i} className="bg-yellow-100 text-yellow-800 text-xs font-bold inline-flex items-center px-3 py-1 rounded-full mt-2 animate-pulse gap-1 mx-auto">
-                    <Gift size={12}/> Compra {p.buy}, Gratis {p.get}!
-                  </div>
-                ))}
               </div>
 
               <div className="flex bg-gray-100 p-1 rounded mb-6">
@@ -190,10 +219,10 @@ export default function RaffleDetail() {
 
               <div className="mt-6 border-t pt-4">
                 <div className="flex justify-between items-center font-bold text-gray-700 text-sm md:text-base">
-                  <span>Boletos: {(buyMode==='machine'?machineQuantity:selectedManualNumbers.length)} + <span className="text-green-600">{bonusCount} Gratis</span></span>
+                  <span>Boletos: {(buyMode==='machine'?machineQuantity:selectedManualNumbers.length)}</span>
                   <span className="text-xl text-black">${(buyMode==='machine'?machineQuantity:selectedManualNumbers.length) * raffle.price}</span>
                 </div>
-                <button onClick={()=>setShowPaymentModal(true)} className="w-full bg-red-600 text-white font-black text-lg md:text-xl py-4 rounded shadow mt-4 hover:bg-red-700 transition transform active:scale-95">
+                <button onClick={handlePrePurchaseCheck} className="w-full bg-red-600 text-white font-black text-lg md:text-xl py-4 rounded shadow mt-4 hover:bg-red-700 transition transform active:scale-95">
                   ¡LOS QUIERO!
                 </button>
               </div>
@@ -202,13 +231,11 @@ export default function RaffleDetail() {
         </div>
       </div>
       
-      {/* MODALES (Responsive) */}
       <AnimatePresence>
         {showPaymentModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-900/90 backdrop-blur-sm">
             <motion.div initial={{scale: 0.9}} animate={{scale: 1}} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-center text-gray-800 mb-4">Confirmar Pedido</h3>
-              <div className="text-center mb-4 text-sm text-gray-500">Apartarás <b>{totalQty}</b> boletos.</div>
               <input type="text" placeholder="Nombre Completo" value={buyerName} onChange={e => setBuyerName(e.target.value)} className="w-full border p-3 rounded-xl mb-3 text-gray-800 outline-none focus:border-blue-600" />
               <input type="tel" placeholder="WhatsApp (10 dígitos)" value={buyerPhone} onChange={e => setBuyerPhone(e.target.value)} className="w-full border p-3 rounded-xl mb-3 text-gray-800 outline-none focus:border-blue-600" />
               <button onClick={handleConfirm} disabled={isProcessing} className="w-full bg-black text-white font-bold py-3 rounded-xl shadow-lg hover:bg-gray-800 transition">{isProcessing?"Procesando...":"Confirmar Apartado"}</button>
