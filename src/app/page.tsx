@@ -158,6 +158,7 @@ function HomeContent() {
           </div>
         ))}
 
+        {/* CORREGIDO: Grid en 2 columnas para desktop, 1 para móvil */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
           {settings?.paymentMethods && (
             <div id="metodos-pago" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden h-full">

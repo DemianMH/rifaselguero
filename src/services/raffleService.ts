@@ -138,30 +138,38 @@ export const reserveTickets = async (raffleId: string, buyerName: string, buyerP
     }
   }
 
+  // --- LÓGICA DE PROMOCIÓN: PRIMEROS 50 COMPRADORES ---
+  // Si compran 10 o más boletos, y aún estamos en los primeros 50 afortunados
   const raffleRef = doc(db, "raffles", raffleId);
   const raffleSnap = await getDoc(raffleRef);
-  const raffleData = raffleSnap.data() as RaffleData;
-  const currentPromoCount = raffleData.highVolumeBuyersCount || 0;
+  
+  if (raffleSnap.exists()) {
+    const raffleData = raffleSnap.data() as RaffleData;
+    const currentPromoCount = raffleData.highVolumeBuyersCount || 0;
 
-  if (quantityPaid >= 10 && currentPromoCount < 50) {
-    let bonusTickets: string[] = [];
-    const limit = Math.pow(10, digitCount);
-    const allBusy = [...currentTakenNumbers, ...finalNumbers];
-    
-    while (bonusTickets.length < 10) {
-       const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0'); 
-       if (!allBusy.includes(num) && !bonusTickets.includes(num)) { 
-         bonusTickets.push(num); 
-       }
+    if (quantityPaid >= 10 && currentPromoCount < 50) {
+      let bonusTickets: string[] = [];
+      const limit = Math.pow(10, digitCount);
+      const allBusy = [...currentTakenNumbers, ...finalNumbers];
+      
+      // Intentamos generar 10 boletos extra únicos
+      let attempts = 0;
+      while (bonusTickets.length < 10 && attempts < 500) {
+         const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0'); 
+         if (!allBusy.includes(num) && !bonusTickets.includes(num)) { 
+           bonusTickets.push(num); 
+         }
+         attempts++;
+      }
+      
+      // Agregamos los bonos al array final
+      finalNumbers = [...finalNumbers, ...bonusTickets];
+      
+      // Incrementamos el contador de la promo en la DB
+      await updateDoc(raffleRef, { highVolumeBuyersCount: increment(1) });
     }
-    finalNumbers = [...finalNumbers, ...bonusTickets];
-    await updateDoc(raffleRef, { highVolumeBuyersCount: increment(1) });
   }
-
-  if (promotions && promotions.length > 0) {
-    // La lógica de promociones estándar se mantiene si se desea, o se puede remover si choca con la promo de 50 personas.
-    // Asumiendo que conviven o la promo de 50 es la principal.
-  }
+  // ----------------------------------------------------
 
   const ticketRef = await addDoc(collection(db, "tickets"), { 
     raffleId, 

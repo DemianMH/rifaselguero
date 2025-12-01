@@ -99,11 +99,9 @@ export default function RaffleDetail() {
     } catch (error) { alert("Error: Números no disponibles"); } finally { setIsProcessing(false); }
   };
 
+  // CORREGIDO: Uso seguro de Regex en lugar de DOM para evitar crash en servidor
   const stripHtml = (html: string) => {
-    if (typeof window === 'undefined') return "";
-    const tmp = document.createElement("DIV");
-    tmp.innerHTML = html;
-    return tmp.textContent || tmp.innerText || "";
+    return html.replace(/<[^>]*>?/gm, '');
   }
 
   if (loading || !raffle) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
@@ -169,7 +167,7 @@ export default function RaffleDetail() {
           ) : (
             <>
               <div className="text-center mb-2">
-                <p className="text-blue-900 font-bold uppercase text-sm tracking-widest border-b border-blue-100 pb-2 inline-block">
+                <p suppressHydrationWarning className="text-blue-900 font-bold uppercase text-sm tracking-widest border-b border-blue-100 pb-2 inline-block">
                   📅 Juega el: {new Date(raffle.endDate).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute:'2-digit' })}
                 </p>
               </div>
