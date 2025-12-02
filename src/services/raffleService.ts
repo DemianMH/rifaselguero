@@ -140,12 +140,41 @@ export const reserveTickets = async (
   manualNumbers?: string[], 
   promotions?: Promotion[]
 ) => {
-  let finalNumbers: string[] = manualNumbers ? [...manualNumbers] : [];
   
-  // Generar números pagados si no son manuales
-  if (!manualNumbers || manualNumbers.length === 0) {
+  // 1. Calcular cuántos boletos de regalo tocan según las promociones configuradas
+  let bonusCount = 0;
+  if (promotions && promotions.length > 0) {
+    promotions.forEach(promo => {
+      if (quantityPaid >= promo.buy) {
+        const sets = Math.floor(quantityPaid / promo.buy);
+        bonusCount += sets * promo.get;
+      }
+    });
+  }
+
+  const totalTicketsNeeded = quantityPaid + bonusCount;
+  let finalNumbers: string[] = [];
+
+  // 2. Si hay números manuales, los usamos primero
+  if (manualNumbers && manualNumbers.length > 0) {
+    finalNumbers = [...manualNumbers];
+    // Si seleccionó manuales, ya son parte de los "quantityPaid". 
+    // Si tocan bonos, hay que generar los bonos aleatoriamente
+    if (bonusCount > 0) {
+       const limit = Math.pow(10, digitCount);
+       let attempts = 0;
+       while (finalNumbers.length < totalTicketsNeeded && attempts < 1000) {
+         const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
+         if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) {
+           finalNumbers.push(num);
+         }
+         attempts++;
+       }
+    }
+  } else {
+    // 3. Generación 100% Aleatoria (Pagados + Bonos)
     const limit = Math.pow(10, digitCount);
-    while (finalNumbers.length < quantityPaid) {
+    while (finalNumbers.length < totalTicketsNeeded) {
       const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
       if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) {
         finalNumbers.push(num);
@@ -153,32 +182,7 @@ export const reserveTickets = async (
     }
   }
 
-  // Lógica de Promoción (+10 de regalo a los primeros 50 que compren >=10)
-  const raffleRef = doc(db, "raffles", raffleId);
-  const raffleSnap = await getDoc(raffleRef);
-  
-  if (raffleSnap.exists()) {
-    const raffleData = raffleSnap.data() as RaffleData;
-    const currentPromoCount = raffleData.highVolumeBuyersCount || 0;
-
-    if (quantityPaid >= 10 && currentPromoCount < 50) {
-      let bonusTickets: string[] = [];
-      const limit = Math.pow(10, digitCount);
-      const allBusy = [...currentTakenNumbers, ...finalNumbers];
-      
-      let attempts = 0;
-      while (bonusTickets.length < 10 && attempts < 500) {
-         const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0'); 
-         if (!allBusy.includes(num) && !bonusTickets.includes(num)) { 
-           bonusTickets.push(num); 
-         }
-         attempts++;
-      }
-      finalNumbers = [...finalNumbers, ...bonusTickets];
-      await updateDoc(raffleRef, { highVolumeBuyersCount: increment(1) });
-    }
-  }
-
+  // Guardamos en Firebase
   const ticketRef = await addDoc(collection(db, "tickets"), { 
     raffleId, 
     buyerName, 
@@ -186,17 +190,17 @@ export const reserveTickets = async (
     buyerState,
     numbers: finalNumbers, 
     paidCount: quantityPaid, 
-    total: quantityPaid * price, 
+    total: quantityPaid * price, // El precio se calcula SOLO por los pagados
     status: 'reserved', 
     createdAt: new Date() 
   });
 
+  const raffleRef = doc(db, "raffles", raffleId);
   await updateDoc(raffleRef, { 
     takenNumbers: arrayUnion(...finalNumbers), 
     ticketsSold: increment(finalNumbers.length) 
   });
 
-  // Retornamos el desglose exacto
   return { 
     id: ticketRef.id, 
     numbers: finalNumbers, 

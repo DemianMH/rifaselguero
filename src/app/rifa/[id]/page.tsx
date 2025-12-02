@@ -31,8 +31,8 @@ export default function RaffleDetail() {
   const [buyerState, setBuyerState] = useState(""); 
   const [finalNumbers, setFinalNumbers] = useState<string[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
-  const [finalPaidCount, setFinalPaidCount] = useState(0); // Nuevo state
-  const [finalBonusCount, setFinalBonusCount] = useState(0); // Nuevo state
+  const [finalPaidCount, setFinalPaidCount] = useState(0);
+  const [finalBonusCount, setFinalBonusCount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
@@ -98,15 +98,14 @@ export default function RaffleDetail() {
       );
       setFinalNumbers(res.numbers);
       setFinalTotal(res.total);
-      setFinalPaidCount(res.paidCount); // Guardamos la cuenta real
-      setFinalBonusCount(res.bonusCount); // Guardamos los bonos
+      setFinalPaidCount(res.paidCount); 
+      setFinalBonusCount(res.bonusCount); 
       setShowPaymentModal(false); setShowSuccessModal(true);
     } catch (error) { alert("Error: Números no disponibles"); } finally { setIsProcessing(false); }
   };
 
   if (loading || !raffle) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   
-  // Construcción de la lista de bancos
   let paymentText = "";
   if (globalSettings?.paymentMethods && Array.isArray(globalSettings.paymentMethods) && globalSettings.paymentMethods.length > 0) {
     paymentText = globalSettings.paymentMethods.map(pm => 
@@ -124,10 +123,10 @@ export default function RaffleDetail() {
     `Quiero apartar boletos para: *${raffle.title}*\n` +
     `👤 A nombre de: ${buyerName}\n` +
     `📍 Desde: ${buyerState}\n\n` +
-    `🔢 *Boletos Pagados (${finalPaidCount}):* ${paidNumbersList}\n` +
+    `🔢 *Boletos Seleccionados (${finalPaidCount}):* ${paidNumbersList}\n` +
     (finalBonusCount > 0 ? `🎁 *Boletos de Regalo (${finalBonusCount}):* ${bonusNumbersList}\n` : ``) +
     `\n💰 *Total a pagar: $${finalTotal}* (Por ${finalPaidCount} boletos)\n\n` +
-    `⚠️ IMPORTANTE: Pondré mi nombre completo en el concepto de la transferencia tambien envía tu comprobante por whatsapp inmediatamente después de pagar para asegurar tus números\n\n` +
+    `⚠️ IMPORTANTE: Pondré mi nombre completo en el concepto de la transferencia tambien envía tu comprobante por whatsapp inmediatamente después de pagar para asegurar tus números.\n\n` +
     `----------------------------------\n` +
     `💳 *CUENTAS DE PAGO:*\n\n` +
     `${paymentText}\n` +
