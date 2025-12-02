@@ -31,6 +31,8 @@ export default function RaffleDetail() {
   const [buyerState, setBuyerState] = useState(""); 
   const [finalNumbers, setFinalNumbers] = useState<string[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
+  const [finalPaidCount, setFinalPaidCount] = useState(0); // Nuevo state
+  const [finalBonusCount, setFinalBonusCount] = useState(0); // Nuevo state
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
@@ -96,16 +98,17 @@ export default function RaffleDetail() {
       );
       setFinalNumbers(res.numbers);
       setFinalTotal(res.total);
+      setFinalPaidCount(res.paidCount); // Guardamos la cuenta real
+      setFinalBonusCount(res.bonusCount); // Guardamos los bonos
       setShowPaymentModal(false); setShowSuccessModal(true);
     } catch (error) { alert("Error: Números no disponibles"); } finally { setIsProcessing(false); }
   };
 
   if (loading || !raffle) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   
-  // --- AQUÍ CONSTRUIMOS LA LISTA DE BANCOS PARA WHATSAPP ---
+  // Construcción de la lista de bancos
   let paymentText = "";
   if (globalSettings?.paymentMethods && Array.isArray(globalSettings.paymentMethods) && globalSettings.paymentMethods.length > 0) {
-    // Recorremos cada banco y creamos una linea de texto
     paymentText = globalSettings.paymentMethods.map(pm => 
       `🔹 *${pm.bankName}*: ${pm.accountNumber}\n   (Titular: ${pm.accountName})`
     ).join('\n\n');
@@ -113,12 +116,17 @@ export default function RaffleDetail() {
     paymentText = "Solicita la cuenta bancaria al administrador.";
   }
 
+  // Separamos los números para mostrarlos ordenados en el mensaje
+  const paidNumbersList = finalNumbers.slice(0, finalPaidCount).join(', ');
+  const bonusNumbersList = finalBonusCount > 0 ? finalNumbers.slice(finalPaidCount).join(', ') : '';
+
   const whatsappMsg = `Hola Rifas El Güero! 🎟️\n` +
     `Quiero apartar boletos para: *${raffle.title}*\n` +
     `👤 A nombre de: ${buyerName}\n` +
-    `📍 Desde: ${buyerState}\n` +
-    `🔢 Boletos (${finalNumbers.length}): ${finalNumbers.join(', ')}\n` +
-    `💰 Total a pagar: *$${finalTotal}*\n\n` +
+    `📍 Desde: ${buyerState}\n\n` +
+    `🔢 *Boletos Pagados (${finalPaidCount}):* ${paidNumbersList}\n` +
+    (finalBonusCount > 0 ? `🎁 *Boletos de Regalo (${finalBonusCount}):* ${bonusNumbersList}\n` : ``) +
+    `\n💰 *Total a pagar: $${finalTotal}* (Por ${finalPaidCount} boletos)\n\n` +
     `⚠️ IMPORTANTE: Pondré mi nombre completo en el concepto de la transferencia tambien envía tu comprobante por whatsapp inmediatamente después de pagar para asegurar tus números\n\n` +
     `----------------------------------\n` +
     `💳 *CUENTAS DE PAGO:*\n\n` +

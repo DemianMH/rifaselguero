@@ -51,12 +51,11 @@ export interface FAQItem {
   answer: string;
 }
 
-// NUEVA INTERFAZ PARA CUENTAS BANCARIAS
 export interface PaymentMethod {
-  bankName: string;      // Ej: BBVA, OXXO
-  accountName: string;   // Ej: Juan Perez
-  accountNumber: string; // Ej: 1234 5678 9012
-  instructions?: string; // Ej: Enviar comprobante
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  instructions?: string;
 }
 
 export interface GlobalSettings {
@@ -64,7 +63,7 @@ export interface GlobalSettings {
   backgroundImage?: string;
   whatsapp: string;
   terms: string;
-  paymentMethods: PaymentMethod[]; // <--- CAMBIO IMPORTANTE: AHORA ES LISTA
+  paymentMethods: PaymentMethod[];
   contactInfo: string;
   faqs: FAQItem[];
   maintenanceMode: boolean;
@@ -84,35 +83,18 @@ export const getGlobalSettings = async (): Promise<GlobalSettings> => {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      // Migración segura: Si paymentMethods era texto antiguo, lo convertimos a array vacío para no romper la app
       let safePaymentMethods: PaymentMethod[] = [];
       if (Array.isArray(data.paymentMethods)) {
         safePaymentMethods = data.paymentMethods;
       }
-      
-      return {
-        ...data,
-        paymentMethods: safePaymentMethods
-      } as GlobalSettings;
+      return { ...data, paymentMethods: safePaymentMethods } as GlobalSettings;
     }
     return { 
-      backgroundColor: "#f3f4f6", 
-      whatsapp: "3326269409", 
-      terms: "", 
-      paymentMethods: [], // Inicializar como array vacío
-      contactInfo: "", 
-      faqs: [],
-      maintenanceMode: false 
+      backgroundColor: "#f3f4f6", whatsapp: "3326269409", terms: "", paymentMethods: [], contactInfo: "", faqs: [], maintenanceMode: false 
     };
   } catch (error) { 
     return { 
-      backgroundColor: "#f3f4f6", 
-      whatsapp: "3326269409", 
-      terms: "", 
-      paymentMethods: [], 
-      contactInfo: "", 
-      faqs: [],
-      maintenanceMode: false 
+      backgroundColor: "#f3f4f6", whatsapp: "3326269409", terms: "", paymentMethods: [], contactInfo: "", faqs: [], maintenanceMode: false 
     }; 
   }
 };
@@ -160,6 +142,7 @@ export const reserveTickets = async (
 ) => {
   let finalNumbers: string[] = manualNumbers ? [...manualNumbers] : [];
   
+  // Generar números pagados si no son manuales
   if (!manualNumbers || manualNumbers.length === 0) {
     const limit = Math.pow(10, digitCount);
     while (finalNumbers.length < quantityPaid) {
@@ -170,6 +153,7 @@ export const reserveTickets = async (
     }
   }
 
+  // Lógica de Promoción (+10 de regalo a los primeros 50 que compren >=10)
   const raffleRef = doc(db, "raffles", raffleId);
   const raffleSnap = await getDoc(raffleRef);
   
@@ -212,7 +196,14 @@ export const reserveTickets = async (
     ticketsSold: increment(finalNumbers.length) 
   });
 
-  return { id: ticketRef.id, numbers: finalNumbers, total: quantityPaid * price };
+  // Retornamos el desglose exacto
+  return { 
+    id: ticketRef.id, 
+    numbers: finalNumbers, 
+    total: quantityPaid * price,
+    paidCount: quantityPaid,
+    bonusCount: finalNumbers.length - quantityPaid
+  };
 };
 
 export const getMyTickets = async (phone: string) => { const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); const snap = await getDocs(q); return snap.docs.map(doc => doc.data() as TicketData); };
