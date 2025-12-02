@@ -30,6 +30,7 @@ export interface TicketData {
   raffleId: string;
   buyerName: string;
   buyerPhone: string;
+  buyerState: string;
   numbers: string[];
   paidCount: number;
   total: number;
@@ -50,12 +51,20 @@ export interface FAQItem {
   answer: string;
 }
 
+// NUEVA INTERFAZ PARA CUENTAS BANCARIAS
+export interface PaymentMethod {
+  bankName: string;      // Ej: BBVA, OXXO
+  accountName: string;   // Ej: Juan Perez
+  accountNumber: string; // Ej: 1234 5678 9012
+  instructions?: string; // Ej: Enviar comprobante
+}
+
 export interface GlobalSettings {
   backgroundColor: string;
   backgroundImage?: string;
   whatsapp: string;
   terms: string;
-  paymentMethods: string;
+  paymentMethods: PaymentMethod[]; // <--- CAMBIO IMPORTANTE: AHORA ES LISTA
   contactInfo: string;
   faqs: FAQItem[];
   maintenanceMode: boolean;
@@ -73,12 +82,24 @@ export const getGlobalSettings = async (): Promise<GlobalSettings> => {
   try {
     const docRef = doc(db, "settings", "global");
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) return docSnap.data() as GlobalSettings;
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      // Migración segura: Si paymentMethods era texto antiguo, lo convertimos a array vacío para no romper la app
+      let safePaymentMethods: PaymentMethod[] = [];
+      if (Array.isArray(data.paymentMethods)) {
+        safePaymentMethods = data.paymentMethods;
+      }
+      
+      return {
+        ...data,
+        paymentMethods: safePaymentMethods
+      } as GlobalSettings;
+    }
     return { 
       backgroundColor: "#f3f4f6", 
       whatsapp: "3326269409", 
       terms: "", 
-      paymentMethods: "", 
+      paymentMethods: [], // Inicializar como array vacío
       contactInfo: "", 
       faqs: [],
       maintenanceMode: false 
@@ -88,7 +109,7 @@ export const getGlobalSettings = async (): Promise<GlobalSettings> => {
       backgroundColor: "#f3f4f6", 
       whatsapp: "3326269409", 
       terms: "", 
-      paymentMethods: "", 
+      paymentMethods: [], 
       contactInfo: "", 
       faqs: [],
       maintenanceMode: false 
@@ -125,7 +146,18 @@ export const setLotteryWinner = async (raffleId: string, winningNumber: string) 
 export const pickWinner = async () => { return null; };
 export const uploadRaffleImage = uploadImage;
 
-export const reserveTickets = async (raffleId: string, buyerName: string, buyerPhone: string, quantityPaid: number, price: number, currentTakenNumbers: string[], digitCount: number, manualNumbers?: string[], promotions?: Promotion[]) => {
+export const reserveTickets = async (
+  raffleId: string, 
+  buyerName: string, 
+  buyerPhone: string, 
+  buyerState: string,
+  quantityPaid: number, 
+  price: number, 
+  currentTakenNumbers: string[], 
+  digitCount: number, 
+  manualNumbers?: string[], 
+  promotions?: Promotion[]
+) => {
   let finalNumbers: string[] = manualNumbers ? [...manualNumbers] : [];
   
   if (!manualNumbers || manualNumbers.length === 0) {
@@ -138,8 +170,6 @@ export const reserveTickets = async (raffleId: string, buyerName: string, buyerP
     }
   }
 
-  // --- LÓGICA DE PROMOCIÓN: PRIMEROS 50 COMPRADORES ---
-  // Si compran 10 o más boletos, y aún estamos en los primeros 50 afortunados
   const raffleRef = doc(db, "raffles", raffleId);
   const raffleSnap = await getDoc(raffleRef);
   
@@ -152,7 +182,6 @@ export const reserveTickets = async (raffleId: string, buyerName: string, buyerP
       const limit = Math.pow(10, digitCount);
       const allBusy = [...currentTakenNumbers, ...finalNumbers];
       
-      // Intentamos generar 10 boletos extra únicos
       let attempts = 0;
       while (bonusTickets.length < 10 && attempts < 500) {
          const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0'); 
@@ -161,20 +190,16 @@ export const reserveTickets = async (raffleId: string, buyerName: string, buyerP
          }
          attempts++;
       }
-      
-      // Agregamos los bonos al array final
       finalNumbers = [...finalNumbers, ...bonusTickets];
-      
-      // Incrementamos el contador de la promo en la DB
       await updateDoc(raffleRef, { highVolumeBuyersCount: increment(1) });
     }
   }
-  // ----------------------------------------------------
 
   const ticketRef = await addDoc(collection(db, "tickets"), { 
     raffleId, 
     buyerName, 
     buyerPhone, 
+    buyerState,
     numbers: finalNumbers, 
     paidCount: quantityPaid, 
     total: quantityPaid * price, 

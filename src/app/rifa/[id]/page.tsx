@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { getRaffleById, reserveTickets, getGlobalSettings, RaffleData, GlobalSettings } from "@/services/raffleService";
 import SlotMachine from "@/components/SlotMachine";
-import { CheckCircle, ShieldCheck, Search, Gift, Lock } from "lucide-react"; 
+import { CheckCircle, ShieldCheck, Search, Lock } from "lucide-react"; 
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -28,6 +28,7 @@ export default function RaffleDetail() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
+  const [buyerState, setBuyerState] = useState(""); 
   const [finalNumbers, setFinalNumbers] = useState<string[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -83,12 +84,12 @@ export default function RaffleDetail() {
   };
 
   const handleConfirm = async () => {
-    if (!buyerName || !buyerPhone) return alert("Llena tus datos");
+    if (!buyerName || !buyerPhone || !buyerState) return alert("Llena todos los datos (Nombre, Teléfono y Estado)");
     const qty = buyMode === 'machine' ? machineQuantity : selectedManualNumbers.length;
     setIsProcessing(true);
     try {
       const res = await reserveTickets(
-        id as string, buyerName, buyerPhone, qty, raffle!.price, raffle!.takenNumbers, 
+        id as string, buyerName, buyerPhone, buyerState, qty, raffle!.price, raffle!.takenNumbers, 
         raffle!.digitCount || 4, 
         buyMode==='manual' ? selectedManualNumbers : undefined, 
         raffle!.promotions
@@ -99,20 +100,30 @@ export default function RaffleDetail() {
     } catch (error) { alert("Error: Números no disponibles"); } finally { setIsProcessing(false); }
   };
 
-  // CORREGIDO: Uso seguro de Regex en lugar de DOM para evitar crash en servidor
-  const stripHtml = (html: string) => {
-    return html.replace(/<[^>]*>?/gm, '');
-  }
-
   if (loading || !raffle) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   
-  const paymentText = globalSettings?.paymentMethods ? stripHtml(globalSettings.paymentMethods).substring(0, 500) : "Cuenta Bancaria...";
+  // --- AQUÍ CONSTRUIMOS LA LISTA DE BANCOS PARA WHATSAPP ---
+  let paymentText = "";
+  if (globalSettings?.paymentMethods && Array.isArray(globalSettings.paymentMethods) && globalSettings.paymentMethods.length > 0) {
+    // Recorremos cada banco y creamos una linea de texto
+    paymentText = globalSettings.paymentMethods.map(pm => 
+      `🔹 *${pm.bankName}*: ${pm.accountNumber}\n   (Titular: ${pm.accountName})`
+    ).join('\n\n');
+  } else {
+    paymentText = "Solicita la cuenta bancaria al administrador.";
+  }
+
   const whatsappMsg = `Hola Rifas El Güero! 🎟️\n` +
     `Quiero apartar boletos para: *${raffle.title}*\n` +
     `👤 A nombre de: ${buyerName}\n` +
+    `📍 Desde: ${buyerState}\n` +
     `🔢 Boletos (${finalNumbers.length}): ${finalNumbers.join(', ')}\n` +
     `💰 Total a pagar: *$${finalTotal}*\n\n` +
-    `Realizaré el pago a:\n${paymentText}\n\n` +
+    `⚠️ IMPORTANTE: Pondré mi nombre completo en el concepto de la transferencia.\n\n` +
+    `----------------------------------\n` +
+    `💳 *CUENTAS DE PAGO:*\n\n` +
+    `${paymentText}\n` +
+    `----------------------------------\n\n` +
     `Espero confirmación. Gracias!`;
 
   return (
@@ -234,8 +245,17 @@ export default function RaffleDetail() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-900/90 backdrop-blur-sm">
             <motion.div initial={{scale: 0.9}} animate={{scale: 1}} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-center text-gray-800 mb-4">Confirmar Pedido</h3>
-              <input type="text" placeholder="Nombre Completo" value={buyerName} onChange={e => setBuyerName(e.target.value)} className="w-full border p-3 rounded-xl mb-3 text-gray-800 outline-none focus:border-blue-600" />
-              <input type="tel" placeholder="WhatsApp (10 dígitos)" value={buyerPhone} onChange={e => setBuyerPhone(e.target.value)} className="w-full border p-3 rounded-xl mb-3 text-gray-800 outline-none focus:border-blue-600" />
+              
+              <div className="space-y-3">
+                <input type="text" placeholder="Nombre Completo" value={buyerName} onChange={e => setBuyerName(e.target.value)} className="w-full border p-3 rounded-xl text-gray-800 outline-none focus:border-blue-600" />
+                <input type="tel" placeholder="WhatsApp (10 dígitos)" value={buyerPhone} onChange={e => setBuyerPhone(e.target.value)} className="w-full border p-3 rounded-xl text-gray-800 outline-none focus:border-blue-600" />
+                <input type="text" placeholder="Estado / Ciudad" value={buyerState} onChange={e => setBuyerState(e.target.value)} className="w-full border p-3 rounded-xl text-gray-800 outline-none focus:border-blue-600" />
+              </div>
+
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800 font-bold mb-4">
+                 ⚠️ Al transferir, por favor escribe tu nombre completo en el concepto de pago.
+              </div>
+
               <button onClick={handleConfirm} disabled={isProcessing} className="w-full bg-black text-white font-bold py-3 rounded-xl shadow-lg hover:bg-gray-800 transition">{isProcessing?"Procesando...":"Confirmar Apartado"}</button>
               <button onClick={() => setShowPaymentModal(false)} className="w-full text-gray-400 py-3 mt-1 font-bold">Cancelar</button>
             </motion.div>
@@ -249,6 +269,7 @@ export default function RaffleDetail() {
                 <div className="max-h-40 overflow-y-auto my-4 grid grid-cols-3 gap-2">
                   {finalNumbers.map(n => <span key={n} className="bg-gray-100 text-xs font-bold p-1 rounded text-gray-600 border">{n}</span>)}
                 </div>
+                <p className="text-xs text-gray-500 mb-4">Envía el mensaje pre-cargado con tu estado y recuerda poner tu nombre en la transferencia.</p>
                 <a href={`https://wa.me/523326269409?text=${encodeURIComponent(whatsappMsg)}`} target="_blank" className="bg-green-500 text-white px-6 py-4 rounded-xl font-bold block w-full shadow-lg hover:bg-green-600 transition transform hover:scale-105">Enviar WhatsApp</a>
                 <button onClick={() => setShowSuccessModal(false)} className="mt-4 text-gray-400 underline text-sm">Cerrar</button>
              </motion.div>

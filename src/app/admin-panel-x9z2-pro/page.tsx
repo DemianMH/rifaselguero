@@ -4,9 +4,9 @@ import {
   createRaffle, updateRaffle, getRaffles, deleteRaffle, getTickets, 
   approveTicket, cancelTicket, uploadImage, setLotteryWinner, 
   getHomeSections, updateHomeSections, getGlobalSettings, updateGlobalSettings,
-  RaffleData, TicketData, HomeSection, GlobalSettings, FAQItem
+  RaffleData, TicketData, HomeSection, GlobalSettings, FAQItem, PaymentMethod
 } from "@/services/raffleService";
-import { Plus, Edit, Trash, Check, X, RefreshCw, Search, Upload, Loader2, Trophy, Home, Settings, ArrowUp, ArrowDown, Layout, Calendar, HelpCircle, Image as ImageIcon, DollarSign, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash, Check, X, RefreshCw, Search, Upload, Loader2, Trophy, Home, Settings, ArrowUp, ArrowDown, Layout, Calendar, HelpCircle, Image as ImageIcon, DollarSign, AlertTriangle, CreditCard } from "lucide-react";
 import Image from "next/image";
 import TextEditor from "@/components/TextEditor"; 
 
@@ -20,7 +20,7 @@ export default function SecretAdminPanel() {
   const [sections, setSections] = useState<HomeSection[]>([]);
   
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({ 
-    backgroundColor: "#f3f4f6", whatsapp: "3326269409", terms: "", paymentMethods: "", contactInfo: "", faqs: [], maintenanceMode: false 
+    backgroundColor: "#f3f4f6", whatsapp: "3326269409", terms: "", paymentMethods: [], contactInfo: "", faqs: [], maintenanceMode: false 
   });
   
   const [isLoading, setIsLoading] = useState(false);
@@ -42,12 +42,17 @@ export default function SecretAdminPanel() {
   const [newQuestion, setNewQuestion] = useState("");
   const [newAnswer, setNewAnswer] = useState("");
 
+  // States para Nuevo Método de Pago
+  const [newBankName, setNewBankName] = useState("");
+  const [newAccName, setNewAccName] = useState("");
+  const [newAccNumber, setNewAccNumber] = useState("");
+
   const loadData = async () => {
     setIsLoading(true);
     try {
       const [r, t, s, g] = await Promise.all([getRaffles(), getTickets(), getHomeSections(), getGlobalSettings()]);
       setRaffles(r); setTickets(t); setSections(s); 
-      setGlobalSettings(g || { backgroundColor: "#f3f4f6", whatsapp: "", terms: "", paymentMethods: "", contactInfo: "", faqs: [], maintenanceMode: false });
+      setGlobalSettings(g || { backgroundColor: "#f3f4f6", whatsapp: "", terms: "", paymentMethods: [], contactInfo: "", faqs: [], maintenanceMode: false });
     } catch (e) { console.error(e); }
     finally { setIsLoading(false); }
   };
@@ -94,6 +99,18 @@ export default function SecretAdminPanel() {
 
   const addFAQ = () => { if(!newQuestion) return; setGlobalSettings({...globalSettings, faqs: [...(globalSettings.faqs||[]), {question:newQuestion, answer:newAnswer}]}); setNewQuestion(""); setNewAnswer(""); };
   const deleteFAQ = (idx: number) => { setGlobalSettings({...globalSettings, faqs: globalSettings.faqs.filter((_, i) => i !== idx)}); };
+  
+  // FUNCIONES PARA MÉTODOS DE PAGO
+  const addPaymentMethod = () => {
+    if(!newBankName || !newAccNumber) return alert("Falta nombre del banco o cuenta");
+    const newMethod: PaymentMethod = { bankName: newBankName, accountName: newAccName, accountNumber: newAccNumber };
+    setGlobalSettings({ ...globalSettings, paymentMethods: [...(globalSettings.paymentMethods || []), newMethod] });
+    setNewBankName(""); setNewAccName(""); setNewAccNumber("");
+  };
+  const deletePaymentMethod = (idx: number) => {
+    setGlobalSettings({ ...globalSettings, paymentMethods: globalSettings.paymentMethods.filter((_, i) => i !== idx) });
+  };
+
   const saveSettings = async () => { await updateGlobalSettings(globalSettings); alert("Ajustes guardados"); };
   const handleBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.[0]) setGlobalSettings({ ...globalSettings, backgroundImage: await uploadImage(e.target.files[0], 'settings') }); };
 
@@ -121,7 +138,7 @@ export default function SecretAdminPanel() {
         )}
 
         {activeTab === 'tickets' && (
-          <div><h2 className="text-2xl font-black text-gray-800 mb-4 uppercase italic">Pagos Pendientes</h2><div className="relative mb-6"><Search className="absolute left-3 top-3.5 text-gray-400" size={20}/><input placeholder="Buscar por nombre o teléfono..." className="w-full pl-10 p-3 border-2 rounded-xl outline-none focus:border-blue-500 bg-white" onChange={e => setSearchTerm(e.target.value)}/></div><div className="space-y-3">{tickets.filter(t => t.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) || t.buyerPhone.includes(searchTerm)).map(t => (<div key={t.id} className={`p-4 md:p-5 border-2 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${t.status === 'reserved' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'}`}><div className="w-full"><p className="font-bold text-lg text-gray-800">{t.buyerName} <span className="text-sm font-normal text-gray-500 block md:inline">📱 {t.buyerPhone}</span></p><p className="text-xs text-gray-600 mt-1 bg-white/50 p-2 rounded border border-gray-200 inline-block">🎟️ {t.numbers.join(", ")}</p><p className="font-black text-xl text-blue-900 mt-2">${t.total} <span className="text-xs font-normal text-gray-500 uppercase">MXN</span></p></div><div className="flex gap-3 w-full md:w-auto">{t.status === 'reserved' ? <><button onClick={() => handleApprove(t.id!)} className="flex-1 md:flex-none bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><Check size={20}/> Aprobar</button><button onClick={() => handleReject(t)} className="flex-1 md:flex-none bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><X size={20}/> Rechazar</button></> : <span className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold border border-green-200 flex items-center gap-2 w-full md:w-auto justify-center"><Check size={16}/> PAGADO</span>}</div></div>))}</div></div>
+          <div><h2 className="text-2xl font-black text-gray-800 mb-4 uppercase italic">Pagos Pendientes</h2><div className="relative mb-6"><Search className="absolute left-3 top-3.5 text-gray-400" size={20}/><input placeholder="Buscar por nombre o teléfono..." className="w-full pl-10 p-3 border-2 rounded-xl outline-none focus:border-blue-500 bg-white" onChange={e => setSearchTerm(e.target.value)}/></div><div className="space-y-3">{tickets.filter(t => t.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) || t.buyerPhone.includes(searchTerm)).map(t => (<div key={t.id} className={`p-4 md:p-5 border-2 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${t.status === 'reserved' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'}`}><div className="w-full"><p className="font-bold text-lg text-gray-800">{t.buyerName} <span className="text-sm font-normal text-gray-500 block md:inline">📱 {t.buyerPhone}</span></p><p className="text-xs font-bold text-blue-600">📍 {t.buyerState || "Sin estado"}</p><p className="text-xs text-gray-600 mt-1 bg-white/50 p-2 rounded border border-gray-200 inline-block">🎟️ {t.numbers.join(", ")}</p><p className="font-black text-xl text-blue-900 mt-2">${t.total} <span className="text-xs font-normal text-gray-500 uppercase">MXN</span></p></div><div className="flex gap-3 w-full md:w-auto">{t.status === 'reserved' ? <><button onClick={() => handleApprove(t.id!)} className="flex-1 md:flex-none bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><Check size={20}/> Aprobar</button><button onClick={() => handleReject(t)} className="flex-1 md:flex-none bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><X size={20}/> Rechazar</button></> : <span className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold border border-green-200 flex items-center gap-2 w-full md:w-auto justify-center"><Check size={16}/> PAGADO</span>}</div></div>))}</div></div>
         )}
 
         {activeTab === 'home' && (
@@ -147,8 +164,34 @@ export default function SecretAdminPanel() {
               <div><label className="font-bold text-sm text-gray-500 block mb-1 uppercase">WhatsApp</label><input value={globalSettings.whatsapp} onChange={e=>setGlobalSettings({...globalSettings, whatsapp:e.target.value})} className="w-full border-2 p-3 rounded-lg"/></div>
               <div className="md:col-span-2"><label className="font-bold text-sm text-gray-500 block mb-1 uppercase">Imagen de Fondo</label><input type="file" onChange={handleBgUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>{globalSettings.backgroundImage && <div className="mt-2 text-xs text-green-600 font-bold">Imagen cargada ✅</div>}</div>
             </div>
+            
+            {/* NUEVA SECCIÓN: MÉTODOS DE PAGO */}
+            <div className="bg-blue-50 p-6 rounded-xl border-2 border-blue-200">
+              <h3 className="font-bold text-lg text-blue-900 mb-4 uppercase flex items-center gap-2"><CreditCard size={20}/> Métodos de Pago (Cuentas)</h3>
+              <div className="grid md:grid-cols-3 gap-2 mb-4">
+                 <input value={newBankName} onChange={e=>setNewBankName(e.target.value)} placeholder="Banco / Método (Ej: BBVA)" className="border p-3 rounded-lg w-full"/>
+                 <input value={newAccName} onChange={e=>setNewAccName(e.target.value)} placeholder="Nombre Titular" className="border p-3 rounded-lg w-full"/>
+                 <input value={newAccNumber} onChange={e=>setNewAccNumber(e.target.value)} placeholder="No. Cuenta / Tarjeta / CLABE" className="border p-3 rounded-lg w-full"/>
+              </div>
+              <button onClick={addPaymentMethod} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 mb-4 w-full md:w-auto">Agregar Cuenta</button>
+              
+              <div className="space-y-3">
+                 {Array.isArray(globalSettings.paymentMethods) && globalSettings.paymentMethods.map((pm, i) => (
+                    <div key={i} className="bg-white p-4 rounded-lg shadow-sm border flex justify-between items-center">
+                       <div>
+                          <p className="font-bold text-blue-900">{pm.bankName}</p>
+                          <p className="text-sm text-gray-600">{pm.accountName}</p>
+                          <p className="font-mono text-sm font-bold text-gray-800">{pm.accountNumber}</p>
+                       </div>
+                       <button onClick={()=>deletePaymentMethod(i)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash size={18}/></button>
+                    </div>
+                 ))}
+                 {(!Array.isArray(globalSettings.paymentMethods) || globalSettings.paymentMethods.length === 0) && <p className="text-gray-400 italic text-sm">No hay métodos de pago registrados.</p>}
+              </div>
+            </div>
+
             <div className="bg-gray-50 p-6 rounded-xl border-2 border-gray-200"><h3 className="font-bold text-lg text-gray-800 mb-4 uppercase">Preguntas Frecuentes (FAQ)</h3><div className="flex flex-col md:flex-row gap-2 mb-4"><input value={newQuestion} onChange={e=>setNewQuestion(e.target.value)} placeholder="Pregunta..." className="flex-1 border p-3 rounded-lg"/><input value={newAnswer} onChange={e=>setNewAnswer(e.target.value)} placeholder="Respuesta..." className="flex-1 border p-3 rounded-lg"/><button onClick={addFAQ} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700">Agregar</button></div><div className="space-y-3 max-h-60 overflow-y-auto">{globalSettings.faqs?.map((faq, i) => (<div key={i} className="bg-white p-4 rounded-lg border flex justify-between items-center shadow-sm"><div><p className="font-bold text-sm text-gray-800">{faq.question}</p><p className="text-xs text-gray-500">{faq.answer}</p></div><button onClick={()=>deleteFAQ(i)} className="text-red-500 bg-red-50 p-2 rounded hover:bg-red-100"><Trash size={16}/></button></div>))}</div></div>
-            <div className="space-y-6"><div><label className="font-bold text-sm text-gray-500 block mb-2 uppercase">Términos y Condiciones</label><TextEditor value={globalSettings.terms} onChange={v=>setGlobalSettings({...globalSettings, terms:v})}/></div><div><label className="font-bold text-sm text-gray-500 block mb-2 uppercase">Métodos de Pago</label><TextEditor value={globalSettings.paymentMethods} onChange={v=>setGlobalSettings({...globalSettings, paymentMethods:v})}/></div><div><label className="font-bold text-sm text-gray-500 block mb-2 uppercase">Contacto</label><TextEditor value={globalSettings.contactInfo} onChange={v=>setGlobalSettings({...globalSettings, contactInfo:v})}/></div></div>
+            <div className="space-y-6"><div><label className="font-bold text-sm text-gray-500 block mb-2 uppercase">Términos y Condiciones</label><TextEditor value={globalSettings.terms} onChange={v=>setGlobalSettings({...globalSettings, terms:v})}/></div><div><label className="font-bold text-sm text-gray-500 block mb-2 uppercase">Contacto</label><TextEditor value={globalSettings.contactInfo} onChange={v=>setGlobalSettings({...globalSettings, contactInfo:v})}/></div></div>
             <button onClick={saveSettings} className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg transition transform hover:scale-[1.01] text-lg">GUARDAR CONFIGURACIÓN</button>
           </div>
         )}

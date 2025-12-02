@@ -2,7 +2,7 @@
 import { useState, useEffect, Suspense } from "react";
 import Navbar from "@/components/Navbar";
 import { getRaffles, getHomeSections, getGlobalSettings, RaffleData, HomeSection, GlobalSettings } from "@/services/raffleService";
-import { Timer, Flag, MessageCircle, HelpCircle, Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { Timer, Flag, MessageCircle, HelpCircle, Calendar, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import TicketVerifier from "@/components/TicketVerifier";
@@ -34,6 +34,31 @@ const FAQAccordionItem = ({ question, answer }: { question: string, answer: stri
   );
 };
 
+// Componente para tarjeta de banco con función de copiado
+const BankCard = ({ bank, name, number }: { bank: string, name: string, number: string }) => {
+  const [copied, setCopied] = useState(false);
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(number);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col justify-between h-full">
+      <div>
+        <p className="font-black text-blue-900 uppercase text-sm mb-1">{bank}</p>
+        <p className="text-xs text-gray-500 mb-2">{name}</p>
+      </div>
+      <div className="flex items-center gap-2 bg-white p-2 rounded border border-gray-300">
+        <span className="font-mono font-bold text-gray-800 text-sm md:text-base flex-1 truncate">{number}</span>
+        <button onClick={copyToClipboard} className="text-gray-500 hover:text-blue-600">
+          {copied ? <Check size={16} className="text-green-500"/> : <Copy size={16}/>}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 function HomeContent() {
   const [raffles, setRaffles] = useState<RaffleData[]>([]);
   const [featuredRaffle, setFeaturedRaffle] = useState<RaffleData | null>(null);
@@ -43,7 +68,7 @@ function HomeContent() {
     backgroundColor: "#f3f4f6", 
     whatsapp: "3326269409", 
     terms: "", 
-    paymentMethods: "", 
+    paymentMethods: [], 
     contactInfo: "", 
     faqs: [],
     maintenanceMode: false
@@ -125,9 +150,7 @@ function HomeContent() {
 
         {sections.map((sec) => (
           <div key={sec.id} className="bg-white/90 backdrop-blur p-6 md:p-10 rounded-3xl shadow-xl border border-white/50 overflow-hidden">
-            
             {sec.type === 'html' && <div className="prose max-w-none text-gray-700 overflow-x-auto" dangerouslySetInnerHTML={{__html: sec.content || ""}} />}
-            
             {sec.type === 'calendar' && (
               <div className="flex flex-col items-center w-full">
                 <h3 className="text-2xl md:text-3xl font-black text-blue-900 mb-6 flex items-center gap-3 text-center"><Calendar className="text-red-500" size={28}/> Calendario</h3>
@@ -136,7 +159,6 @@ function HomeContent() {
                 </div>
               </div>
             )}
-
             {sec.type === 'faq' && (
               <div id="preguntas-frecuentes">
                 <h3 className="text-2xl md:text-3xl font-black text-blue-900 mb-8 flex items-center gap-3 justify-center"><HelpCircle className="text-yellow-500" size={28}/> Preguntas Frecuentes</h3>
@@ -158,14 +180,22 @@ function HomeContent() {
           </div>
         ))}
 
-        {/* CORREGIDO: Grid en 2 columnas para desktop, 1 para móvil */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
-          {settings?.paymentMethods && (
-            <div id="metodos-pago" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden h-full">
-              <h3 className="text-xl md:text-2xl font-black text-blue-900 mb-4 uppercase">Métodos de Pago</h3>
-              <div className="prose text-sm md:text-base text-gray-600 max-w-full overflow-x-auto" dangerouslySetInnerHTML={{__html: settings.paymentMethods}} />
-            </div>
-          )}
+          {/* MÉTODOS DE PAGO: RENDERIZADO COMO TARJETAS */}
+          <div id="metodos-pago" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden h-full">
+            <h3 className="text-xl md:text-2xl font-black text-blue-900 mb-4 uppercase">Métodos de Pago</h3>
+            
+            {Array.isArray(settings.paymentMethods) && settings.paymentMethods.length > 0 ? (
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {settings.paymentMethods.map((pm, i) => (
+                     <BankCard key={i} bank={pm.bankName} name={pm.accountName} number={pm.accountNumber}/>
+                  ))}
+               </div>
+            ) : (
+              <p className="text-gray-500">No hay métodos de pago registrados.</p>
+            )}
+          </div>
+
           {settings?.contactInfo && (
             <div id="contacto" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden h-full">
               <h3 className="text-xl md:text-2xl font-black text-blue-900 mb-4 uppercase">Contacto</h3>
