@@ -119,7 +119,7 @@ export default function RaffleDetail() {
     `📍 Desde: ${buyerState}\n` +
     `🔢 Boletos (${finalNumbers.length}): ${finalNumbers.join(', ')}\n` +
     `💰 Total a pagar: *$${finalTotal}*\n\n` +
-    `⚠️ IMPORTANTE: Pondré mi nombre completo en el concepto de la transferencia.\n\n` +
+    `⚠️ IMPORTANTE: Pondré mi nombre completo en el concepto de la transferencia tambien envía tu comprobante por whatsapp inmediatamente después de pagar para asegurar tus números\n\n` +
     `----------------------------------\n` +
     `💳 *CUENTAS DE PAGO:*\n\n` +
     `${paymentText}\n` +
