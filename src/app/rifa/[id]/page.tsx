@@ -75,6 +75,7 @@ export default function RaffleDetail() {
 
   const handlePrePurchaseCheck = () => {
     if (buyMode === 'machine') {
+      // Validamos si los números ya se generaron y coinciden con la cantidad solicitada
       if (machineNumbers.length !== machineQuantity) {
         const autoNumbers = generateRandomNumbers(machineQuantity, raffle?.digitCount || 4, raffle?.takenNumbers || []);
         setMachineNumbers(autoNumbers);
@@ -87,21 +88,46 @@ export default function RaffleDetail() {
 
   const handleConfirm = async () => {
     if (!buyerName || !buyerPhone || !buyerState) return alert("Llena todos los datos (Nombre, Teléfono y Estado)");
+    
+    // Determinamos qué números vamos a enviar
     const qty = buyMode === 'machine' ? machineQuantity : selectedManualNumbers.length;
+    
+    // CORRECCIÓN CLAVE: Enviamos SIEMPRE los números seleccionados (ya sean manuales o de la maquinita)
+    // Antes se enviaba 'undefined' en modo máquina, lo que hacía que el backend generara nuevos.
+    const numbersToSend = buyMode === 'machine' ? machineNumbers : selectedManualNumbers;
+    
     setIsProcessing(true);
     try {
       const res = await reserveTickets(
-        id as string, buyerName, buyerPhone, buyerState, qty, raffle!.price, raffle!.takenNumbers, 
+        id as string, 
+        buyerName, 
+        buyerPhone, 
+        buyerState, 
+        qty, 
+        raffle!.price, 
         raffle!.digitCount || 4, 
-        buyMode==='manual' ? selectedManualNumbers : undefined, 
+        numbersToSend, // <--- Aquí pasamos los números visuales para que se respeten
         raffle!.promotions
       );
+      
       setFinalNumbers(res.numbers);
       setFinalTotal(res.total);
       setFinalPaidCount(res.paidCount); 
       setFinalBonusCount(res.bonusCount); 
-      setShowPaymentModal(false); setShowSuccessModal(true);
-    } catch (error) { alert("Error: Números no disponibles"); } finally { setIsProcessing(false); }
+      setShowPaymentModal(false); 
+      setShowSuccessModal(true);
+    } catch (error: any) { 
+      // Si hay error (ej. alguien ganó el número mientras confirmabas), mostramos el mensaje
+      alert(error.message || error || "Error al apartar. Alguno de los números seleccionados ya no está disponible. Por favor intenta de nuevo."); 
+      
+      // Opcional: Si falla la maquinita, regenerar para que el usuario no tenga que volver a girar manualmente si no quiere
+      if (buyMode === 'machine') {
+         const newAutoNumbers = generateRandomNumbers(machineQuantity, raffle?.digitCount || 4, raffle?.takenNumbers || []);
+         setMachineNumbers(newAutoNumbers);
+      }
+    } finally { 
+      setIsProcessing(false); 
+    }
   };
 
   if (loading || !raffle) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
@@ -115,7 +141,6 @@ export default function RaffleDetail() {
     paymentText = "Solicita la cuenta bancaria al administrador.";
   }
 
-  // Separamos los números para mostrarlos ordenados en el mensaje
   const paidNumbersList = finalNumbers.slice(0, finalPaidCount).join(', ');
   const bonusNumbersList = finalBonusCount > 0 ? finalNumbers.slice(finalPaidCount).join(', ') : '';
 
@@ -132,6 +157,9 @@ export default function RaffleDetail() {
     `${paymentText}\n` +
     `----------------------------------\n\n` +
     `Espero confirmación. Gracias!`;
+
+  // Previsualización correcta en el modal
+  const previewNumbers = buyMode === 'machine' ? machineNumbers : selectedManualNumbers;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 w-full overflow-x-hidden">
@@ -253,6 +281,15 @@ export default function RaffleDetail() {
             <motion.div initial={{scale: 0.9}} animate={{scale: 1}} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-center text-gray-800 mb-4">Confirmar Pedido</h3>
               
+              {/* VISTA PREVIA DE NÚMEROS A RESERVAR (Validación Visual para el usuario) */}
+              <div className="mb-4 text-center">
+                <p className="text-sm text-gray-600 mb-2">Estás a punto de apartar estos números:</p>
+                <div className="flex flex-wrap gap-1 justify-center max-h-24 overflow-y-auto p-2 bg-gray-50 rounded border">
+                  {previewNumbers.map(n => <span key={n} className="text-xs font-bold bg-white border px-2 py-1 rounded text-gray-800">{n}</span>)}
+                </div>
+                <p className="text-lg font-black text-blue-900 mt-2">Total: ${(buyMode==='machine'?machineQuantity:selectedManualNumbers.length) * raffle.price}</p>
+              </div>
+
               <div className="space-y-3">
                 <input type="text" placeholder="Nombre Completo" value={buyerName} onChange={e => setBuyerName(e.target.value)} className="w-full border p-3 rounded-xl text-gray-800 outline-none focus:border-blue-600" />
                 <input type="tel" placeholder="WhatsApp (10 dígitos)" value={buyerPhone} onChange={e => setBuyerPhone(e.target.value)} className="w-full border p-3 rounded-xl text-gray-800 outline-none focus:border-blue-600" />

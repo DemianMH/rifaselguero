@@ -1,7 +1,7 @@
 import { db, storage } from "@/lib/firebase";
 import { 
   collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, setDoc, 
-  query, orderBy, where, arrayUnion, arrayRemove, increment 
+  query, orderBy, where, arrayUnion, arrayRemove, increment, runTransaction 
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -128,6 +128,7 @@ export const setLotteryWinner = async (raffleId: string, winningNumber: string) 
 export const pickWinner = async () => { return null; };
 export const uploadRaffleImage = uploadImage;
 
+// --- FUNCIÓN BLINDADA PARA COHERENCIA TOTAL ---
 export const reserveTickets = async (
   raffleId: string, 
   buyerName: string, 
@@ -135,79 +136,102 @@ export const reserveTickets = async (
   buyerState: string,
   quantityPaid: number, 
   price: number, 
-  currentTakenNumbers: string[], 
   digitCount: number, 
-  manualNumbers?: string[], 
+  manualNumbers?: string[], // Ahora esto incluye también los de la maquinita
   promotions?: Promotion[]
 ) => {
   
-  // 1. Calcular cuántos boletos de regalo tocan según las promociones configuradas
-  let bonusCount = 0;
-  if (promotions && promotions.length > 0) {
-    promotions.forEach(promo => {
-      if (quantityPaid >= promo.buy) {
-        const sets = Math.floor(quantityPaid / promo.buy);
-        bonusCount += sets * promo.get;
+  // Usamos una transacción para asegurar consistencia
+  return await runTransaction(db, async (transaction) => {
+    const raffleRef = doc(db, "raffles", raffleId);
+    const raffleDoc = await transaction.get(raffleRef);
+    
+    if (!raffleDoc.exists()) throw "La rifa no existe.";
+    
+    const raffleData = raffleDoc.data() as RaffleData;
+    const takenNumbers = raffleData.takenNumbers || [];
+    
+    // 1. Cálculo de Bonos (Promociones)
+    let bonusCount = 0;
+    if (promotions && promotions.length > 0) {
+      promotions.forEach(promo => {
+        if (quantityPaid >= promo.buy) {
+          const sets = Math.floor(quantityPaid / promo.buy);
+          bonusCount += sets * promo.get;
+        }
+      });
+    }
+
+    const totalTicketsNeeded = quantityPaid + bonusCount;
+    let finalNumbers: string[] = [];
+
+    // 2. Validación de Números Solicitados (Manuales o Maquinita)
+    if (manualNumbers && manualNumbers.length > 0) {
+      // Verificar si los números que el usuario vio en pantalla siguen libres
+      const conflict = manualNumbers.some(n => takenNumbers.includes(n));
+      if (conflict) {
+        throw new Error("Uno o más números seleccionados ya fueron ganados por otra persona. Por favor intenta de nuevo.");
       }
-    });
-  }
-
-  const totalTicketsNeeded = quantityPaid + bonusCount;
-  let finalNumbers: string[] = [];
-
-  // 2. Si hay números manuales, los usamos primero
-  if (manualNumbers && manualNumbers.length > 0) {
-    finalNumbers = [...manualNumbers];
-    // Si seleccionó manuales, ya son parte de los "quantityPaid". 
-    // Si tocan bonos, hay que generar los bonos aleatoriamente
-    if (bonusCount > 0) {
-       const limit = Math.pow(10, digitCount);
-       let attempts = 0;
-       while (finalNumbers.length < totalTicketsNeeded && attempts < 1000) {
-         const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
-         if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) {
-           finalNumbers.push(num);
+      finalNumbers = [...manualNumbers];
+      
+      // Rellenar con aleatorios SOLO SI FALTAN (ej. por bonos)
+      // Como los bonos no se previsualizan, estos sí pueden ser generados al momento
+      if (finalNumbers.length < totalTicketsNeeded) {
+         const limit = Math.pow(10, digitCount);
+         let attempts = 0;
+         while (finalNumbers.length < totalTicketsNeeded && attempts < 2000) {
+           const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
+           if (!takenNumbers.includes(num) && !finalNumbers.includes(num)) {
+             finalNumbers.push(num);
+           }
+           attempts++;
          }
-         attempts++;
-       }
-    }
-  } else {
-    // 3. Generación 100% Aleatoria (Pagados + Bonos)
-    const limit = Math.pow(10, digitCount);
-    while (finalNumbers.length < totalTicketsNeeded) {
-      const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
-      if (!currentTakenNumbers.includes(num) && !finalNumbers.includes(num)) {
-        finalNumbers.push(num);
+      }
+    } else {
+      // Generación 100% Aleatoria (Backup por si falla algo en el front)
+      const limit = Math.pow(10, digitCount);
+      let attempts = 0;
+      while (finalNumbers.length < totalTicketsNeeded && attempts < 5000) {
+        const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
+        if (!takenNumbers.includes(num) && !finalNumbers.includes(num)) {
+          finalNumbers.push(num);
+        }
+        attempts++;
       }
     }
-  }
 
-  // Guardamos en Firebase
-  const ticketRef = await addDoc(collection(db, "tickets"), { 
-    raffleId, 
-    buyerName, 
-    buyerPhone, 
-    buyerState,
-    numbers: finalNumbers, 
-    paidCount: quantityPaid, 
-    total: quantityPaid * price, // El precio se calcula SOLO por los pagados
-    status: 'reserved', 
-    createdAt: new Date() 
+    if (finalNumbers.length < totalTicketsNeeded) {
+      throw new Error("No se encontraron suficientes números disponibles. Intenta una cantidad menor.");
+    }
+
+    // 3. Escritura en BD
+    const newTicketRef = doc(collection(db, "tickets"));
+    
+    transaction.set(newTicketRef, { 
+      raffleId, 
+      buyerName, 
+      buyerPhone, 
+      buyerState,
+      numbers: finalNumbers, 
+      paidCount: quantityPaid, 
+      total: quantityPaid * price, 
+      status: 'reserved', 
+      createdAt: new Date() 
+    });
+
+    transaction.update(raffleRef, { 
+      takenNumbers: arrayUnion(...finalNumbers), 
+      ticketsSold: increment(finalNumbers.length) 
+    });
+
+    return { 
+      id: newTicketRef.id, 
+      numbers: finalNumbers, 
+      total: quantityPaid * price,
+      paidCount: quantityPaid,
+      bonusCount: finalNumbers.length - quantityPaid
+    };
   });
-
-  const raffleRef = doc(db, "raffles", raffleId);
-  await updateDoc(raffleRef, { 
-    takenNumbers: arrayUnion(...finalNumbers), 
-    ticketsSold: increment(finalNumbers.length) 
-  });
-
-  return { 
-    id: ticketRef.id, 
-    numbers: finalNumbers, 
-    total: quantityPaid * price,
-    paidCount: quantityPaid,
-    bonusCount: finalNumbers.length - quantityPaid
-  };
 };
 
 export const getMyTickets = async (phone: string) => { const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); const snap = await getDocs(q); return snap.docs.map(doc => doc.data() as TicketData); };
