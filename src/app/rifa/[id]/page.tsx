@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { getRaffleById, reserveTickets, getGlobalSettings, RaffleData, GlobalSettings } from "@/services/raffleService";
 import SlotMachine from "@/components/SlotMachine";
-import { CheckCircle, ShieldCheck, Search, Lock } from "lucide-react"; 
+import { CheckCircle, ShieldCheck, Search, Lock, Ticket } from "lucide-react"; 
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -75,7 +75,6 @@ export default function RaffleDetail() {
 
   const handlePrePurchaseCheck = () => {
     if (buyMode === 'machine') {
-      // Validamos si los números ya se generaron y coinciden con la cantidad solicitada
       if (machineNumbers.length !== machineQuantity) {
         const autoNumbers = generateRandomNumbers(machineQuantity, raffle?.digitCount || 4, raffle?.takenNumbers || []);
         setMachineNumbers(autoNumbers);
@@ -88,12 +87,7 @@ export default function RaffleDetail() {
 
   const handleConfirm = async () => {
     if (!buyerName || !buyerPhone || !buyerState) return alert("Llena todos los datos (Nombre, Teléfono y Estado)");
-    
-    // Determinamos qué números vamos a enviar
     const qty = buyMode === 'machine' ? machineQuantity : selectedManualNumbers.length;
-    
-    // CORRECCIÓN CLAVE: Enviamos SIEMPRE los números seleccionados (ya sean manuales o de la maquinita)
-    // Antes se enviaba 'undefined' en modo máquina, lo que hacía que el backend generara nuevos.
     const numbersToSend = buyMode === 'machine' ? machineNumbers : selectedManualNumbers;
     
     setIsProcessing(true);
@@ -106,7 +100,7 @@ export default function RaffleDetail() {
         qty, 
         raffle!.price, 
         raffle!.digitCount || 4, 
-        numbersToSend, // <--- Aquí pasamos los números visuales para que se respeten
+        numbersToSend, 
         raffle!.promotions
       );
       
@@ -117,10 +111,7 @@ export default function RaffleDetail() {
       setShowPaymentModal(false); 
       setShowSuccessModal(true);
     } catch (error: any) { 
-      // Si hay error (ej. alguien ganó el número mientras confirmabas), mostramos el mensaje
-      alert(error.message || error || "Error al apartar. Alguno de los números seleccionados ya no está disponible. Por favor intenta de nuevo."); 
-      
-      // Opcional: Si falla la maquinita, regenerar para que el usuario no tenga que volver a girar manualmente si no quiere
+      alert(error.message || error || "Error al apartar. Intenta de nuevo."); 
       if (buyMode === 'machine') {
          const newAutoNumbers = generateRandomNumbers(machineQuantity, raffle?.digitCount || 4, raffle?.takenNumbers || []);
          setMachineNumbers(newAutoNumbers);
@@ -158,121 +149,149 @@ export default function RaffleDetail() {
     `----------------------------------\n\n` +
     `Espero confirmación. Gracias!`;
 
-  // Previsualización correcta en el modal
   const previewNumbers = buyMode === 'machine' ? machineNumbers : selectedManualNumbers;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 w-full overflow-x-hidden">
       <Navbar />
-      <div className="max-w-6xl mx-auto px-4 py-8 grid lg:grid-cols-2 gap-6 md:gap-10">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         
-        <div className="space-y-4 w-full">
-          <div className="relative h-64 md:h-[500px] bg-white rounded-2xl shadow-lg overflow-hidden w-full border border-gray-100 flex items-center justify-center">
-            {raffle.images && raffle.images[0] && (
-              <Image 
-                src={raffle.images[selectedImageIndex]} 
-                alt={raffle.title} 
-                fill 
-                className="object-contain" 
-                priority 
-              />
+        <div className="grid lg:grid-cols-2 gap-6 md:gap-10 mb-8">
+          {/* COLUMNA IZQUIERDA: FOTOS E INFO */}
+          <div className="space-y-4 w-full">
+            <div className="relative h-64 md:h-[500px] bg-white rounded-2xl shadow-lg overflow-hidden w-full border border-gray-100 flex items-center justify-center">
+              {raffle.images && raffle.images[0] && (
+                <Image 
+                  src={raffle.images[selectedImageIndex]} 
+                  alt={raffle.title} 
+                  fill 
+                  className="object-contain" 
+                  priority 
+                />
+              )}
+            </div>
+
+            {raffle.images.length > 1 && (
+              <div className="flex flex-wrap gap-2 md:gap-3 justify-center md:justify-start">
+                {raffle.images.map((img, i) => (
+                  <div 
+                    key={i} 
+                    onClick={()=>setSelectedImageIndex(i)} 
+                    className={`relative w-16 h-16 md:w-20 md:h-20 shrink-0 cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${selectedImageIndex === i ? 'border-blue-900 scale-105' : 'border-transparent opacity-80'}`}
+                  >
+                    <Image src={img} alt="" fill className="object-cover"/>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <div className="bg-white p-6 rounded-xl shadow w-full">
+              <h1 className="text-2xl md:text-4xl font-black uppercase text-blue-900 mb-4 break-words">{raffle.title}</h1>
+              <div className="prose max-w-none text-gray-600 text-sm md:text-base break-words" dangerouslySetInnerHTML={{__html: raffle.description}} />
+              <div className="bg-blue-50 p-4 rounded border border-blue-100 mt-4 font-bold text-blue-900 flex items-center gap-2 text-sm md:text-base">
+                <ShieldCheck className="shrink-0"/> Lotería Nacional ({raffle.digitCount || 4} Cifras)
+              </div>
+            </div>
+          </div>
+
+          {/* COLUMNA DERECHA: COMPRA */}
+          <div className={`bg-white p-6 rounded-xl shadow-xl h-fit sticky top-24 border-t-8 w-full ${isMaintenance ? 'border-gray-400' : 'border-red-600'}`}>
+            
+            {isMaintenance ? (
+              <div className="text-center py-10 px-4">
+                <Lock className="w-16 h-16 md:w-20 md:h-20 mx-auto text-gray-300 mb-4" />
+                <h3 className="text-xl md:text-2xl font-black text-gray-700 mb-3 uppercase italic">Ventas Pausadas</h3>
+                <p className="text-gray-500 font-medium text-sm">Mantenimiento temporal. <br/>Intenta más tarde.</p>
+              </div>
+            ) : (
+              <>
+                <div className="text-center mb-2">
+                  <p suppressHydrationWarning className="text-blue-900 font-bold uppercase text-sm tracking-widest border-b border-blue-100 pb-2 inline-block">
+                    📅 Juega el: {new Date(raffle.endDate).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute:'2-digit' })}
+                  </p>
+                </div>
+
+                <div className="text-center mb-6">
+                  <span className="text-gray-400 font-bold text-xs uppercase">Precio Boleto</span>
+                  <div className="text-4xl md:text-5xl font-black text-red-600">${raffle.price}</div>
+                </div>
+
+                <div className="flex bg-gray-100 p-1 rounded mb-6">
+                  <button onClick={()=>setBuyMode('machine')} className={`flex-1 py-2 rounded font-bold text-sm transition ${buyMode==='machine'?'bg-white shadow text-blue-900':'text-gray-400'}`}>MAQUINITA</button>
+                  <button onClick={()=>setBuyMode('manual')} className={`flex-1 py-2 rounded font-bold text-sm transition ${buyMode==='manual'?'bg-white shadow text-blue-900':'text-gray-400'}`}>MANUAL</button>
+                </div>
+
+                {buyMode === 'machine' ? (
+                  <div className="space-y-4 text-center">
+                    <div className="flex justify-center gap-2 mb-2 flex-wrap">
+                      {[1, 3, 5, 10, 20].map(n => (
+                        <button key={n} onClick={()=>{setMachineQuantity(n); setCustomQuantity("")}} className={`px-3 py-2 md:px-4 rounded border font-bold text-sm ${machineQuantity===n && customQuantity==="" ?'bg-blue-900 text-white':'bg-white'}`}>{n}</button>
+                      ))}
+                      <input type="number" placeholder="Otro" value={customQuantity} onChange={e=>{setCustomQuantity(e.target.value); setMachineQuantity(+e.target.value)}} className="w-16 md:w-20 border p-2 rounded text-center font-bold text-sm"/>
+                    </div>
+                    <SlotMachine quantity={machineQuantity} 
+                      digitCount={raffle.digitCount||4} 
+                      takenNumbers={raffle.takenNumbers || []} 
+                      onGenerate={setMachineNumbers} />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <input type="number" placeholder={`Terminación`} value={manualSearch} onChange={(e)=>setManualSearch(e.target.value)} className="flex-1 border-2 p-3 rounded-xl outline-none w-full" />
+                      <button onClick={handleSearch} className="bg-gray-800 text-white p-3 rounded-xl flex-shrink-0"><Search/></button>
+                    </div>
+                    {manualResults.length>0 && (
+                      <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded">
+                        {manualResults.map(n=><button key={n} onClick={()=>{setSelectedManualNumbers([...selectedManualNumbers, n]); setManualResults(manualResults.filter(x=>x!==n))}} className="bg-white border px-3 py-1 rounded font-mono font-bold text-sm">{n}</button>)}
+                      </div>
+                    )}
+                    <div className="border-t pt-4">
+                      <p className="text-xs font-bold text-gray-400 mb-2">Seleccionados:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedManualNumbers.map(n=><span key={n} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-mono font-bold text-sm flex items-center gap-2">{n} <button onClick={()=>setSelectedManualNumbers(selectedManualNumbers.filter(x=>x!==n))} className="text-red-500">x</button></span>)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-6 border-t pt-4">
+                  <div className="flex justify-between items-center font-bold text-gray-700 text-sm md:text-base">
+                    <span>Boletos: {(buyMode==='machine'?machineQuantity:selectedManualNumbers.length)}</span>
+                    <span className="text-xl text-black">${(buyMode==='machine'?machineQuantity:selectedManualNumbers.length) * raffle.price}</span>
+                  </div>
+                  <button onClick={handlePrePurchaseCheck} className="w-full bg-red-600 text-white font-black text-lg md:text-xl py-4 rounded shadow mt-4 hover:bg-red-700 transition transform active:scale-95">
+                    ¡LOS QUIERO!
+                  </button>
+                </div>
+              </>
             )}
           </div>
-
-          {raffle.images.length > 1 && (
-            <div className="flex flex-wrap gap-2 md:gap-3 justify-center md:justify-start">
-              {raffle.images.map((img, i) => (
-                <div 
-                  key={i} 
-                  onClick={()=>setSelectedImageIndex(i)} 
-                  className={`relative w-16 h-16 md:w-20 md:h-20 shrink-0 cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${selectedImageIndex === i ? 'border-blue-900 scale-105' : 'border-transparent opacity-80'}`}
-                >
-                  <Image src={img} alt="" fill className="object-cover"/>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          <div className="bg-white p-6 rounded-xl shadow w-full">
-            <h1 className="text-2xl md:text-4xl font-black uppercase text-blue-900 mb-4 break-words">{raffle.title}</h1>
-            <div className="prose max-w-none text-gray-600 text-sm md:text-base break-words" dangerouslySetInnerHTML={{__html: raffle.description}} />
-            <div className="bg-blue-50 p-4 rounded border border-blue-100 mt-4 font-bold text-blue-900 flex items-center gap-2 text-sm md:text-base">
-              <ShieldCheck className="shrink-0"/> Lotería Nacional ({raffle.digitCount || 4} Cifras)
-            </div>
-          </div>
         </div>
 
-        <div className={`bg-white p-6 rounded-xl shadow-xl h-fit sticky top-24 border-t-8 w-full ${isMaintenance ? 'border-gray-400' : 'border-red-600'}`}>
-          
-          {isMaintenance ? (
-            <div className="text-center py-10 px-4">
-              <Lock className="w-16 h-16 md:w-20 md:h-20 mx-auto text-gray-300 mb-4" />
-              <h3 className="text-xl md:text-2xl font-black text-gray-700 mb-3 uppercase italic">Ventas Pausadas</h3>
-              <p className="text-gray-500 font-medium text-sm">Mantenimiento temporal. <br/>Intenta más tarde.</p>
+        {/* TABLA DE NÚMEROS COMPRADOS */}
+        <div className="bg-white p-6 rounded-xl shadow border border-gray-100">
+          <h3 className="text-2xl font-black text-blue-900 mb-6 uppercase flex items-center gap-2 border-b pb-2">
+            <Ticket size={28}/> Números Comprados
+          </h3>
+          {raffle.takenNumbers && raffle.takenNumbers.length > 0 ? (
+            <div>
+              <p className="mb-4 text-sm text-gray-500">Estos números ya han sido vendidos y no están disponibles.</p>
+              <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2 max-h-96 overflow-y-auto p-2 bg-gray-50 rounded-lg border border-gray-200">
+                {raffle.takenNumbers.sort((a,b) => Number(a) - Number(b)).map(num => (
+                  <div key={num} className="bg-red-100 text-red-700 font-mono font-bold text-center py-1 rounded text-xs md:text-sm border border-red-200 select-none opacity-80 cursor-not-allowed">
+                    {num}
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
-            <>
-              <div className="text-center mb-2">
-                <p suppressHydrationWarning className="text-blue-900 font-bold uppercase text-sm tracking-widest border-b border-blue-100 pb-2 inline-block">
-                  📅 Juega el: {new Date(raffle.endDate).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute:'2-digit' })}
-                </p>
-              </div>
-
-              <div className="text-center mb-6">
-                <span className="text-gray-400 font-bold text-xs uppercase">Precio Boleto</span>
-                <div className="text-4xl md:text-5xl font-black text-red-600">${raffle.price}</div>
-              </div>
-
-              <div className="flex bg-gray-100 p-1 rounded mb-6">
-                <button onClick={()=>setBuyMode('machine')} className={`flex-1 py-2 rounded font-bold text-sm transition ${buyMode==='machine'?'bg-white shadow text-blue-900':'text-gray-400'}`}>MAQUINITA</button>
-                <button onClick={()=>setBuyMode('manual')} className={`flex-1 py-2 rounded font-bold text-sm transition ${buyMode==='manual'?'bg-white shadow text-blue-900':'text-gray-400'}`}>MANUAL</button>
-              </div>
-
-              {buyMode === 'machine' ? (
-                <div className="space-y-4 text-center">
-                  <div className="flex justify-center gap-2 mb-2 flex-wrap">
-                    {[1, 3, 5, 10, 20].map(n => (
-                      <button key={n} onClick={()=>{setMachineQuantity(n); setCustomQuantity("")}} className={`px-3 py-2 md:px-4 rounded border font-bold text-sm ${machineQuantity===n && customQuantity==="" ?'bg-blue-900 text-white':'bg-white'}`}>{n}</button>
-                    ))}
-                    <input type="number" placeholder="Otro" value={customQuantity} onChange={e=>{setCustomQuantity(e.target.value); setMachineQuantity(+e.target.value)}} className="w-16 md:w-20 border p-2 rounded text-center font-bold text-sm"/>
-                  </div>
-                  <SlotMachine quantity={machineQuantity} 
-                    digitCount={raffle.digitCount||4} 
-                    takenNumbers={raffle.takenNumbers || []} 
-                    onGenerate={setMachineNumbers} />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex gap-2">
-                    <input type="number" placeholder={`Terminación`} value={manualSearch} onChange={(e)=>setManualSearch(e.target.value)} className="flex-1 border-2 p-3 rounded-xl outline-none w-full" />
-                    <button onClick={handleSearch} className="bg-gray-800 text-white p-3 rounded-xl flex-shrink-0"><Search/></button>
-                  </div>
-                  {manualResults.length>0 && (
-                    <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded">
-                      {manualResults.map(n=><button key={n} onClick={()=>{setSelectedManualNumbers([...selectedManualNumbers, n]); setManualResults(manualResults.filter(x=>x!==n))}} className="bg-white border px-3 py-1 rounded font-mono font-bold text-sm">{n}</button>)}
-                    </div>
-                  )}
-                  <div className="border-t pt-4">
-                    <p className="text-xs font-bold text-gray-400 mb-2">Seleccionados:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedManualNumbers.map(n=><span key={n} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-mono font-bold text-sm flex items-center gap-2">{n} <button onClick={()=>setSelectedManualNumbers(selectedManualNumbers.filter(x=>x!==n))} className="text-red-500">x</button></span>)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-6 border-t pt-4">
-                <div className="flex justify-between items-center font-bold text-gray-700 text-sm md:text-base">
-                  <span>Boletos: {(buyMode==='machine'?machineQuantity:selectedManualNumbers.length)}</span>
-                  <span className="text-xl text-black">${(buyMode==='machine'?machineQuantity:selectedManualNumbers.length) * raffle.price}</span>
-                </div>
-                <button onClick={handlePrePurchaseCheck} className="w-full bg-red-600 text-white font-black text-lg md:text-xl py-4 rounded shadow mt-4 hover:bg-red-700 transition transform active:scale-95">
-                  ¡LOS QUIERO!
-                </button>
-              </div>
-            </>
+            <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-lg border border-dashed">
+              <Ticket size={48} className="mx-auto mb-2 opacity-20"/>
+              <p className="italic">Aún no se han comprado números. ¡Sé el primero en participar!</p>
+            </div>
           )}
         </div>
+
       </div>
       
       <AnimatePresence>
@@ -281,7 +300,6 @@ export default function RaffleDetail() {
             <motion.div initial={{scale: 0.9}} animate={{scale: 1}} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-center text-gray-800 mb-4">Confirmar Pedido</h3>
               
-              {/* VISTA PREVIA DE NÚMEROS A RESERVAR (Validación Visual para el usuario) */}
               <div className="mb-4 text-center">
                 <p className="text-sm text-gray-600 mb-2">Estás a punto de apartar estos números:</p>
                 <div className="flex flex-wrap gap-1 justify-center max-h-24 overflow-y-auto p-2 bg-gray-50 rounded border">
