@@ -34,7 +34,6 @@ const FAQAccordionItem = ({ question, answer }: { question: string, answer: stri
   );
 };
 
-// Componente para tarjeta de banco con función de copiado
 const BankCard = ({ bank, name, number }: { bank: string, name: string, number: string }) => {
   const [copied, setCopied] = useState(false);
   const copyToClipboard = () => {
@@ -136,7 +135,10 @@ function HomeContent() {
                   </div>
                   <div className="p-4 md:p-6 flex flex-col flex-1">
                     <h3 className="font-black text-lg md:text-xl uppercase line-clamp-1 mb-2 text-gray-800 group-hover:text-blue-600 transition">{r.title}</h3>
-                    <p className="text-sm text-gray-500 mb-4">Boletos: <span className="font-bold text-black">{r.ticketsSold}</span></p>
+                    <div className="flex justify-between text-sm text-gray-500 mb-4">
+                      <p>Boletos vendidos: <span className="font-bold text-black">{r.ticketsSold}</span></p>
+                      <p>Disponibles: <span className="font-bold text-green-600">{Math.pow(10, r.digitCount) - r.ticketsSold}</span></p>
+                    </div>
                     <div className="mt-auto flex justify-between items-center pt-4 border-t border-gray-100">
                       <span className="text-2xl md:text-3xl font-black text-red-600">${r.price}</span>
                       <span className="bg-blue-900 text-white px-4 py-1 md:px-6 md:py-2 rounded-lg text-xs md:text-sm font-bold shadow hover:bg-blue-800 transition">VER</span>
@@ -181,7 +183,6 @@ function HomeContent() {
         ))}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
-          {/* MÉTODOS DE PAGO: RENDERIZADO COMO TARJETAS */}
           <div id="metodos-pago" className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-gray-100 scroll-mt-28 overflow-hidden h-full">
             <h3 className="text-xl md:text-2xl font-black text-blue-900 mb-4 uppercase">Métodos de Pago</h3>
             
@@ -225,7 +226,7 @@ function HomeContent() {
           <button onClick={() => document.getElementById('contacto')?.scrollIntoView({behavior:'smooth'})}>Contacto</button>
           <button onClick={() => document.getElementById('metodos-pago')?.scrollIntoView({behavior:'smooth'})}>Pagos</button>
         </div>
-        © 2024 Rifas El Güero. Todos los derechos reservados.
+        © 2025 Rifas El Güero. Todos los derechos reservados.
       </footer>
     </div>
   );

@@ -128,7 +128,6 @@ export const setLotteryWinner = async (raffleId: string, winningNumber: string) 
 export const pickWinner = async () => { return null; };
 export const uploadRaffleImage = uploadImage;
 
-// --- FUNCIÓN BLINDADA PARA COHERENCIA TOTAL ---
 export const reserveTickets = async (
   raffleId: string, 
   buyerName: string, 
@@ -137,11 +136,10 @@ export const reserveTickets = async (
   quantityPaid: number, 
   price: number, 
   digitCount: number, 
-  manualNumbers?: string[], // Ahora esto incluye también los de la maquinita
+  manualNumbers?: string[], 
   promotions?: Promotion[]
 ) => {
   
-  // Usamos una transacción para asegurar consistencia
   return await runTransaction(db, async (transaction) => {
     const raffleRef = doc(db, "raffles", raffleId);
     const raffleDoc = await transaction.get(raffleRef);
@@ -151,7 +149,6 @@ export const reserveTickets = async (
     const raffleData = raffleDoc.data() as RaffleData;
     const takenNumbers = raffleData.takenNumbers || [];
     
-    // 1. Cálculo de Bonos (Promociones)
     let bonusCount = 0;
     if (promotions && promotions.length > 0) {
       promotions.forEach(promo => {
@@ -165,17 +162,13 @@ export const reserveTickets = async (
     const totalTicketsNeeded = quantityPaid + bonusCount;
     let finalNumbers: string[] = [];
 
-    // 2. Validación de Números Solicitados (Manuales o Maquinita)
     if (manualNumbers && manualNumbers.length > 0) {
-      // Verificar si los números que el usuario vio en pantalla siguen libres
       const conflict = manualNumbers.some(n => takenNumbers.includes(n));
       if (conflict) {
         throw new Error("Uno o más números seleccionados ya fueron ganados por otra persona. Por favor intenta de nuevo.");
       }
       finalNumbers = [...manualNumbers];
       
-      // Rellenar con aleatorios SOLO SI FALTAN (ej. por bonos)
-      // Como los bonos no se previsualizan, estos sí pueden ser generados al momento
       if (finalNumbers.length < totalTicketsNeeded) {
          const limit = Math.pow(10, digitCount);
          let attempts = 0;
@@ -188,7 +181,6 @@ export const reserveTickets = async (
          }
       }
     } else {
-      // Generación 100% Aleatoria (Backup por si falla algo en el front)
       const limit = Math.pow(10, digitCount);
       let attempts = 0;
       while (finalNumbers.length < totalTicketsNeeded && attempts < 5000) {
@@ -204,7 +196,6 @@ export const reserveTickets = async (
       throw new Error("No se encontraron suficientes números disponibles. Intenta una cantidad menor.");
     }
 
-    // 3. Escritura en BD
     const newTicketRef = doc(collection(db, "tickets"));
     
     transaction.set(newTicketRef, { 
@@ -234,4 +225,14 @@ export const reserveTickets = async (
   });
 };
 
-export const getMyTickets = async (phone: string) => { const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); const snap = await getDocs(q); return snap.docs.map(doc => doc.data() as TicketData); };
+export const getMyTickets = async (phone: string) => { 
+  const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); 
+  const snap = await getDocs(q); 
+  return snap.docs.map(doc => doc.data() as TicketData); 
+};
+
+export const getTicketByNumber = async (ticketNumber: string) => {
+  const q = query(collection(db, "tickets"), where("numbers", "array-contains", ticketNumber));
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as TicketData);
+};
