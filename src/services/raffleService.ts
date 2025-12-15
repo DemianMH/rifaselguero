@@ -38,6 +38,13 @@ export interface TicketData {
   createdAt: any;
 }
 
+// Nueva interfaz para tickets cancelados
+export interface CancelledTicketData extends TicketData {
+  originalTicketId: string;
+  cancelledAt: any;
+  reason?: string;
+}
+
 export interface HomeSection {
   id: string;
   type: 'html' | 'calendar' | 'faq';
@@ -123,7 +130,44 @@ export const getRaffleById = async (id: string) => { const docRef = doc(db, "raf
 export const deleteRaffle = async (id: string) => { await deleteDoc(doc(db, "raffles", id)); };
 export const getTickets = async () => { const q = query(collection(db, "tickets"), orderBy("createdAt", "desc")); const snap = await getDocs(q); return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as TicketData[]; };
 export const approveTicket = async (id: string) => updateDoc(doc(db, "tickets", id), { status: 'sold' });
-export const cancelTicket = async (id: string, rId: string, nums: string[]) => { await deleteDoc(doc(db, "tickets", id)); await updateDoc(doc(db, "raffles", rId), { takenNumbers: arrayRemove(...nums), ticketsSold: increment(-nums.length) }); };
+
+// --- MODIFICADO: Guardar en historial antes de borrar ---
+export const cancelTicket = async (id: string, rId: string, nums: string[]) => { 
+  try {
+    // 1. Obtener datos del ticket antes de borrarlo
+    const ticketRef = doc(db, "tickets", id);
+    const ticketSnap = await getDoc(ticketRef);
+    
+    if (ticketSnap.exists()) {
+      const ticketData = ticketSnap.data();
+      // 2. Guardar en colección de cancelados
+      await addDoc(collection(db, "cancelled_tickets"), {
+        ...ticketData,
+        originalTicketId: id,
+        cancelledAt: new Date(),
+        reason: "Falta de pago"
+      });
+    }
+
+    // 3. Borrar y actualizar rifa (lógica original)
+    await deleteDoc(ticketRef); 
+    await updateDoc(doc(db, "raffles", rId), { 
+      takenNumbers: arrayRemove(...nums), 
+      ticketsSold: increment(-nums.length) 
+    });
+  } catch (e) {
+    console.error("Error cancelando ticket:", e);
+    throw e;
+  }
+};
+
+// --- NUEVO: Obtener historial de cancelados ---
+export const getCancelledTickets = async () => {
+  const q = query(collection(db, "cancelled_tickets"), orderBy("cancelledAt", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CancelledTicketData[];
+};
+
 export const setLotteryWinner = async (raffleId: string, winningNumber: string) => { const q = query(collection(db, "tickets"), where("raffleId", "==", raffleId), where("numbers", "array-contains", winningNumber)); const snap = await getDocs(q); if (snap.empty) return null; const winner = snap.docs[0].data() as TicketData; await updateDoc(doc(db, "raffles", raffleId), { status: 'finished', winnerNumber: winningNumber, winnerName: winner.buyerName }); return { winningNumber, winnerName: winner.buyerName }; };
 export const pickWinner = async () => { return null; };
 export const uploadRaffleImage = uploadImage;

@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { getRaffleById, reserveTickets, getGlobalSettings, RaffleData, GlobalSettings } from "@/services/raffleService";
 import SlotMachine from "@/components/SlotMachine";
-import { CheckCircle, ShieldCheck, Search, Lock, Ticket } from "lucide-react"; 
+import { CheckCircle, ShieldCheck, Search, Lock, Ticket, Gift } from "lucide-react"; 
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -142,7 +142,7 @@ export default function RaffleDetail() {
     `🔢 *Boletos Seleccionados (${finalPaidCount}):* ${paidNumbersList}\n` +
     (finalBonusCount > 0 ? `🎁 *Boletos de Regalo (${finalBonusCount}):* ${bonusNumbersList}\n` : ``) +
     `\n💰 *Total a pagar: $${finalTotal}* (Por ${finalPaidCount} boletos)\n\n` +
-    `⚠️ IMPORTANTE: Pondré mi nombre completo en el concepto de la transferencia tambien envía tu comprobante por whatsapp inmediatamente después de pagar para asegurar tus números.\n\n` +
+    `⚠️ IMPORTANTE: Pondré mi nombre completo en el concepto de la transferencia.\n\n` +
     `----------------------------------\n` +
     `💳 *CUENTAS DE PAGO:*\n\n` +
     `${paymentText}\n` +
@@ -212,6 +212,22 @@ export default function RaffleDetail() {
                 </div>
 
                 <div className="text-center mb-6">
+                  {/* NUEVO: BLOQUE DE PROMOCIONES ACTIVAS */}
+                  {raffle.promotions && raffle.promotions.length > 0 && (
+                    <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3 mb-4 animate-pulse mx-auto w-full max-w-xs">
+                      <h4 className="font-black text-yellow-800 flex items-center justify-center gap-2 text-xs uppercase tracking-wide">
+                        <Gift size={16} /> Promociones Activas
+                      </h4>
+                      <div className="space-y-1 mt-1 text-center">
+                        {raffle.promotions.map((p, i) => (
+                          <p key={i} className="text-sm text-yellow-900 font-bold">
+                            🎁 Compra {p.buy} y llévate {p.get} GRATIS
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <span className="text-gray-400 font-bold text-xs uppercase">Precio Boleto</span>
                   <div className="text-4xl md:text-5xl font-black text-red-600">${raffle.price}</div>
                 </div>
