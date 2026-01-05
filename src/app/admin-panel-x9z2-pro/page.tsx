@@ -107,7 +107,6 @@ export default function SecretAdminPanel() {
   const addFAQ = () => { if(!newQuestion) return; setGlobalSettings({...globalSettings, faqs: [...(globalSettings.faqs||[]), {question:newQuestion, answer:newAnswer}]}); setNewQuestion(""); setNewAnswer(""); };
   const deleteFAQ = (idx: number) => { setGlobalSettings({...globalSettings, faqs: globalSettings.faqs.filter((_, i) => i !== idx)}); };
   
-  // FUNCIONES PARA MÉTODOS DE PAGO
   const addPaymentMethod = () => {
     if(!newBankName || !newAccNumber) return alert("Falta nombre del banco o cuenta");
     const newMethod: PaymentMethod = { bankName: newBankName, accountName: newAccName, accountNumber: newAccNumber };
@@ -130,6 +129,9 @@ export default function SecretAdminPanel() {
 
   if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center bg-gray-900"><form onSubmit={handleLogin} className="bg-white p-8 rounded shadow-xl w-full max-w-sm"><h2 className="font-bold text-xl mb-4 text-center">Admin El Güero</h2><input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Usuario" className="border p-3 block w-full mb-3 rounded-lg outline-none"/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Contraseña" className="border p-3 block w-full mb-4 rounded-lg outline-none"/><button className="bg-blue-900 text-white p-3 w-full rounded font-bold">Entrar</button></form></div>;
 
+  // CÁLCULO DEL TOTAL VENDIDO (SOLO CONFIRMADOS)
+  const totalSold = tickets.filter(t => t.status === 'sold').reduce((sum, t) => sum + t.total, 0);
+
   return (
     <div className="min-h-screen bg-gray-100 font-sans text-gray-800 pb-20">
       {showLotteryModal && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><div className="bg-white p-6 rounded-xl text-center max-w-sm w-full"><Trophy className="text-yellow-500 w-12 h-12 mx-auto mb-2"/><h3 className="text-xl font-black mb-2">Ganador Lotería</h3><input value={lotteryNumber} onChange={e=>setLotteryNumber(e.target.value)} className="border-2 p-3 w-full text-center text-2xl font-mono font-black mb-4 rounded-lg" placeholder="000000" maxLength={6}/><div className="flex gap-2"><button onClick={()=>setShowLotteryModal(false)} className="flex-1 py-2 border rounded">Cancelar</button><button onClick={confirmLotteryWinner} className="flex-1 py-2 bg-blue-900 text-white rounded font-bold">Confirmar</button></div></div></div>}
@@ -145,12 +147,40 @@ export default function SecretAdminPanel() {
         )}
 
         {activeTab === 'tickets' && (
-          <div><h2 className="text-2xl font-black text-gray-800 mb-4 uppercase italic">Pagos Pendientes</h2><div className="relative mb-6"><Search className="absolute left-3 top-3.5 text-gray-400" size={20}/><input placeholder="Buscar por nombre o teléfono..." className="w-full pl-10 p-3 border-2 rounded-xl outline-none focus:border-blue-500 bg-white" onChange={e => setSearchTerm(e.target.value)}/></div><div className="space-y-3">{tickets.filter(t => t.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) || t.buyerPhone.includes(searchTerm)).map(t => (<div key={t.id} className={`p-4 md:p-5 border-2 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${t.status === 'reserved' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'}`}><div className="w-full"><p className="font-bold text-lg text-gray-800">{t.buyerName} <span className="text-sm font-normal text-gray-500 block md:inline">📱 {t.buyerPhone}</span></p>
-          <p className="text-xs font-bold text-blue-600">📍 {t.buyerState || "Sin estado"}</p>
-          <p className="text-xs text-gray-600 mt-1 bg-white/50 p-2 rounded border border-gray-200 inline-block">🎟️ {t.numbers.join(", ")}</p><p className="font-black text-xl text-blue-900 mt-2">${t.total} <span className="text-xs font-normal text-gray-500 uppercase">MXN</span></p></div><div className="flex gap-3 w-full md:w-auto">{t.status === 'reserved' ? <><button onClick={() => handleApprove(t.id!)} className="flex-1 md:flex-none bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><Check size={20}/> Aprobar</button><button onClick={() => handleReject(t)} className="flex-1 md:flex-none bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><X size={20}/> Rechazar</button></> : <span className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold border border-green-200 flex items-center gap-2 w-full md:w-auto justify-center"><Check size={16}/> PAGADO</span>}</div></div>))}</div></div>
+          <div>
+            <div className="flex flex-col md:flex-row justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-gray-800 uppercase italic">Pagos Pendientes</h2>
+              {/* TOTAL DE VENTAS CONFIRMADAS */}
+              <div className="bg-green-100 text-green-800 px-6 py-3 rounded-xl font-black text-lg shadow-sm border border-green-200">
+                💰 Total Vendido: ${totalSold.toLocaleString('es-MX')}
+              </div>
+            </div>
+            
+            <div className="relative mb-6"><Search className="absolute left-3 top-3.5 text-gray-400" size={20}/><input placeholder="Buscar por nombre o teléfono..." className="w-full pl-10 p-3 border-2 rounded-xl outline-none focus:border-blue-500 bg-white" onChange={e => setSearchTerm(e.target.value)}/></div>
+            
+            <div className="space-y-3">
+              {/* CORRECCIÓN DE ORDENAMIENTO: .sort() */}
+              {tickets
+                .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                .filter(t => t.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) || t.buyerPhone.includes(searchTerm))
+                .map(t => (
+                <div key={t.id} className={`p-4 md:p-5 border-2 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${t.status === 'reserved' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'}`}>
+                  <div className="w-full">
+                    <p className="font-bold text-lg text-gray-800">{t.buyerName} <span className="text-sm font-normal text-gray-500 block md:inline">📱 {t.buyerPhone}</span></p>
+                    <p className="text-xs font-bold text-blue-600">📍 {t.buyerState || "Sin estado"}</p>
+                    <p className="text-xs text-gray-600 mt-1 bg-white/50 p-2 rounded border border-gray-200 inline-block">🎟️ {t.numbers.join(", ")}</p>
+                    <p className="font-black text-xl text-blue-900 mt-2">${t.total} <span className="text-xs font-normal text-gray-500 uppercase">MXN</span></p>
+                  </div>
+                  <div className="flex gap-3 w-full md:w-auto">
+                    {t.status === 'reserved' ? <><button onClick={() => handleApprove(t.id!)} className="flex-1 md:flex-none bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><Check size={20}/> Aprobar</button><button onClick={() => handleReject(t)} className="flex-1 md:flex-none bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><X size={20}/> Rechazar</button></> : <span className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold border border-green-200 flex items-center gap-2 w-full md:w-auto justify-center"><Check size={16}/> PAGADO</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
-        {/* NUEVA PESTAÑA: CANCELADOS */}
+        {/* ... PESTAÑA CANCELADOS ... */}
         {activeTab === 'cancelled' && (
           <div>
             <h2 className="text-2xl font-black text-red-800 mb-4 uppercase italic">Historial de Cancelados</h2>

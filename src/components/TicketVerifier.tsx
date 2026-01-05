@@ -51,6 +51,18 @@ export default function TicketVerifier() {
     const statusText = t.status === 'sold' ? 'PAGADO' : 'PENDIENTE DE PAGO';
     const borderColor = t.status === 'sold' ? '#22c55e' : '#eab308';
     
+    // CORRECCIÓN: Fecha con Hora y Zona Horaria de México
+    const formattedDate = new Date(t.createdAt.seconds * 1000).toLocaleString('es-MX', { 
+      timeZone: 'America/Mexico_City',
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    
     const htmlContent = `
       <html>
         <head>
@@ -101,7 +113,7 @@ export default function TicketVerifier() {
                  <div class="info-group" style="flex: 1; text-align: right;"><div class="label">FOLIO</div><div class="value" style="font-family: monospace;">#${t.id?.slice(0, 6).toUpperCase()}</div></div>
               </div>
                <div class="info-group"><div class="label">ESTADO</div><div class="value">${t.buyerState || 'N/A'}</div></div>
-               <div class="info-group"><div class="label">FECHA DE EMISIÓN</div><div class="value">${new Date(t.createdAt.seconds * 1000).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div></div>
+               <div class="info-group"><div class="label">FECHA DE EMISIÓN</div><div class="value">${formattedDate}</div></div>
               <div class="label" style="text-align:center; margin-top:25px; font-size: 14px;">TUS BOLETOS SELECCIONADOS</div>
               <div class="numbers-box">${t.numbers.map(n => `<span class="number-tag">${n}</span>`).join('')}</div>
               <div class="total-section"><span class="total-label">IMPORTE TOTAL:</span><span class="total-amount">$${t.total.toFixed(2)} MXN</span></div>
