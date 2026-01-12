@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMyTickets, getTicketByNumber, getRaffleById, TicketData } from "@/services/raffleService";
+import { getMyTickets, getTicketByNumber, getRaffleById, getTicketsByName, TicketData, getTickets } from "@/services/raffleService";
 import { Ticket, Search, Printer } from "lucide-react";
 
 interface TicketWithRaffleInfo extends TicketData {
@@ -15,18 +15,39 @@ export default function TicketVerifier() {
 
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!queryInput) return alert("Ingresa un número válido");
+    if (!queryInput) return alert("Ingresa un dato válido");
     setLoading(true);
     
     try {
+      const cleanInput = queryInput.trim();
       let results: TicketData[] = [];
-      
-      // Intentar primero por teléfono
-      results = await getMyTickets(queryInput);
-      
-      // Si no hay resultados, intentar por número de boleto
+      const seenIds = new Set();
+
+      // 1. Buscar por Teléfono (Exacto)
+      const byPhone = await getMyTickets(cleanInput);
+      byPhone.forEach(t => { if(!seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
+
+      // 2. Buscar por Número de Boleto
       if (results.length === 0) {
-        results = await getTicketByNumber(queryInput);
+        const byTicketNum = await getTicketByNumber(cleanInput);
+        byTicketNum.forEach(t => { if(!seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
+      }
+
+      // 3. Buscar por Nombre (Intento Exacto y luego Búsqueda General si falla)
+      if (results.length === 0) {
+         // Intento exacto
+         const byName = await getTicketsByName(cleanInput);
+         byName.forEach(t => { if(!seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
+         
+         // Si aun no hay nada, hacemos una búsqueda más amplia (traer últimos tickets y filtrar)
+         // Esto es "fallback" para nombres parciales
+         if (results.length === 0 && isNaN(Number(cleanInput))) {
+            const allRecent = await getTickets(); // Esto trae los tickets (limitado por tu servicio si tiene limite, sino cuidado)
+            const filtered = allRecent.filter(t => 
+              t.buyerName.toLowerCase().includes(cleanInput.toLowerCase())
+            );
+            filtered.forEach(t => { if(!seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
+         }
       }
       
       const enrichedTickets = await Promise.all(results.map(async (ticket) => {
@@ -51,7 +72,6 @@ export default function TicketVerifier() {
     const statusText = t.status === 'sold' ? 'PAGADO' : 'PENDIENTE DE PAGO';
     const borderColor = t.status === 'sold' ? '#22c55e' : '#eab308';
     
-    // CORRECCIÓN: Fecha con Hora y Zona Horaria de México
     const formattedDate = new Date(t.createdAt.seconds * 1000).toLocaleString('es-MX', { 
       timeZone: 'America/Mexico_City',
       weekday: 'long', 
@@ -143,12 +163,12 @@ export default function TicketVerifier() {
         <h3 className="font-black text-xl md:text-3xl uppercase italic mb-2 flex items-center justify-center gap-2">
            <Search size={24}/> Verificador de Boletos
         </h3>
-        <p className="text-white/90 text-sm md:text-base">Ingresa tu número de celular o boleto para ver tus comprobantes.</p>
+        <p className="text-white/90 text-sm md:text-base">Ingresa tu número de celular, número de boleto o nombre.</p>
       </div>
       
       <div className="p-6 md:p-8 bg-white">
         <form onSubmit={handleCheck} className="flex flex-col md:flex-row gap-4">
-          <input type="text" placeholder="Tu celular o número de boleto" value={queryInput} onChange={(e) => setQueryInput(e.target.value)} className="w-full flex-1 border-2 border-gray-300 rounded-xl p-3 md:p-4 text-lg focus:border-red-600 outline-none text-gray-800 font-bold text-center" />
+          <input type="text" placeholder="Celular, Boleto o Nombre" value={queryInput} onChange={(e) => setQueryInput(e.target.value)} className="w-full flex-1 border-2 border-gray-300 rounded-xl p-3 md:p-4 text-lg focus:border-red-600 outline-none text-gray-800 font-bold text-center" />
           <button type="submit" className="w-full md:w-auto bg-black text-white font-bold px-8 py-3 md:py-4 rounded-xl hover:bg-gray-900 transition shadow-lg transform active:scale-95">{loading ? "Buscando..." : "Consultar"}</button>
         </form>
 
@@ -169,6 +189,7 @@ export default function TicketVerifier() {
                         <span className="text-xs text-gray-500">({new Date(t.createdAt.seconds * 1000).toLocaleDateString()})</span>
                         <span className={`text-xs font-black px-2 py-0.5 rounded ${t.status === 'sold' ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{t.status === 'sold' ? 'PAGADO' : 'PENDIENTE'}</span>
                       </div>
+                      <div className="font-bold text-gray-700 text-sm mb-1">{t.buyerName}</div>
                       <div className="flex flex-wrap justify-center md:justify-start gap-1">{t.numbers.map(num => (<span key={num} className="bg-gray-50 border border-gray-200 px-2 py-0.5 rounded text-gray-600 font-mono font-bold text-sm">{num}</span>))}</div>
                       <div className="text-xs text-blue-900 font-bold mt-1">{t.raffleTitle}</div> 
                     </div>

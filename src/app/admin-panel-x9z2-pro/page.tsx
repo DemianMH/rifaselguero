@@ -3,10 +3,10 @@ import { useState, useEffect } from "react";
 import { 
   createRaffle, updateRaffle, getRaffles, deleteRaffle, getTickets, 
   approveTicket, cancelTicket, uploadImage, setLotteryWinner, 
-  getHomeSections, updateHomeSections, getGlobalSettings, updateGlobalSettings, getCancelledTickets,
+  getHomeSections, updateHomeSections, getGlobalSettings, updateGlobalSettings, getCancelledTickets, updateTicket,
   RaffleData, TicketData, CancelledTicketData, HomeSection, GlobalSettings, FAQItem, PaymentMethod
 } from "@/services/raffleService";
-import { Plus, Edit, Trash, Check, X, RefreshCw, Search, Upload, Loader2, Trophy, Home, Settings, ArrowUp, ArrowDown, Layout, Calendar, HelpCircle, Image as ImageIcon, DollarSign, AlertTriangle, CreditCard, Ban } from "lucide-react";
+import { Plus, Edit, Trash, Check, X, RefreshCw, Search, Upload, Loader2, Trophy, Home, Settings, ArrowUp, ArrowDown, Layout, Calendar, HelpCircle, Image as ImageIcon, DollarSign, AlertTriangle, CreditCard, Ban, Save } from "lucide-react";
 import Image from "next/image";
 import TextEditor from "@/components/TextEditor"; 
 
@@ -30,6 +30,12 @@ export default function SecretAdminPanel() {
   const [isUploading, setIsUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
+  // Nuevo state para editar tickets
+  const [editingTicket, setEditingTicket] = useState<TicketData | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editState, setEditState] = useState("");
+
   const [showLotteryModal, setShowLotteryModal] = useState(false);
   const [lotteryRaffleId, setLotteryRaffleId] = useState("");
   const [lotteryNumber, setLotteryNumber] = useState("");
@@ -127,13 +133,58 @@ export default function SecretAdminPanel() {
   const removeImage = (index: number) => setNewRaffle(prev => ({ ...prev, images: prev.images?.filter((_, i) => i !== index) }));
   const handlePromoChange = (index: number, field: 'buy' | 'get', value: number) => { const newPromos = [...(newRaffle.promotions || [])]; newPromos[index][field] = value; setNewRaffle({ ...newRaffle, promotions: newPromos }); };
 
+  // Funciones para editar ticket
+  const startEditTicket = (t: TicketData) => {
+    setEditingTicket(t);
+    setEditName(t.buyerName);
+    setEditPhone(t.buyerPhone);
+    setEditState(t.buyerState || "");
+  };
+  const saveTicketChanges = async () => {
+    if (!editingTicket || !editingTicket.id) return;
+    await updateTicket(editingTicket.id, { 
+      buyerName: editName, 
+      buyerPhone: editPhone, 
+      buyerState: editState 
+    });
+    setEditingTicket(null);
+    loadData();
+  };
+
   if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center bg-gray-900"><form onSubmit={handleLogin} className="bg-white p-8 rounded shadow-xl w-full max-w-sm"><h2 className="font-bold text-xl mb-4 text-center">Admin El Güero</h2><input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Usuario" className="border p-3 block w-full mb-3 rounded-lg outline-none"/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Contraseña" className="border p-3 block w-full mb-4 rounded-lg outline-none"/><button className="bg-blue-900 text-white p-3 w-full rounded font-bold">Entrar</button></form></div>;
 
-  // CÁLCULO DEL TOTAL VENDIDO (SOLO CONFIRMADOS)
   const totalSold = tickets.filter(t => t.status === 'sold').reduce((sum, t) => sum + t.total, 0);
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans text-gray-800 pb-20">
+      
+      {/* MODAL DE EDICIÓN DE TICKET */}
+      {editingTicket && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-xl w-full max-w-md">
+            <h3 className="text-xl font-black mb-4 uppercase">Editar Boleto</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Nombre</label>
+                <input value={editName} onChange={e=>setEditName(e.target.value)} className="w-full border p-2 rounded"/>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Teléfono</label>
+                <input value={editPhone} onChange={e=>setEditPhone(e.target.value)} className="w-full border p-2 rounded"/>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Estado</label>
+                <input value={editState} onChange={e=>setEditState(e.target.value)} className="w-full border p-2 rounded"/>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button onClick={()=>setEditingTicket(null)} className="flex-1 py-2 border rounded font-bold">Cancelar</button>
+              <button onClick={saveTicketChanges} className="flex-1 py-2 bg-blue-900 text-white rounded font-bold flex items-center justify-center gap-2"><Save size={16}/> Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showLotteryModal && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><div className="bg-white p-6 rounded-xl text-center max-w-sm w-full"><Trophy className="text-yellow-500 w-12 h-12 mx-auto mb-2"/><h3 className="text-xl font-black mb-2">Ganador Lotería</h3><input value={lotteryNumber} onChange={e=>setLotteryNumber(e.target.value)} className="border-2 p-3 w-full text-center text-2xl font-mono font-black mb-4 rounded-lg" placeholder="000000" maxLength={6}/><div className="flex gap-2"><button onClick={()=>setShowLotteryModal(false)} className="flex-1 py-2 border rounded">Cancelar</button><button onClick={confirmLotteryWinner} className="flex-1 py-2 bg-blue-900 text-white rounded font-bold">Confirmar</button></div></div></div>}
       <nav className="bg-black text-white p-4 sticky top-0 z-50 flex flex-col md:flex-row justify-between items-center shadow-md border-b-4 border-red-600 gap-4 md:gap-0"><span className="font-black text-xl italic text-yellow-400 tracking-wide">PANEL ADMIN</span><div className="flex gap-1 bg-gray-800 p-1 rounded-lg overflow-x-auto w-full md:w-auto">{['raffles', 'tickets', 'cancelled', 'home', 'settings'].map((tab) => (<button key={tab} onClick={()=>setActiveTab(tab as any)} className={`px-3 py-2 rounded capitalize text-sm font-bold whitespace-nowrap flex items-center gap-2 transition ${activeTab===tab?'bg-blue-600 text-white shadow':'text-gray-400 hover:text-white'}`}>{tab === 'raffles' && <Layout size={14}/>}{tab === 'tickets' && <DollarSign size={14}/>}{tab === 'cancelled' && <Ban size={14}/>}{tab === 'home' && <Home size={14}/>}{tab === 'settings' && <Settings size={14}/>}{tab === 'cancelled' ? 'Cancelados' : tab}</button>))}</div></nav>
       <main className="p-4 md:p-6 max-w-5xl mx-auto">
@@ -150,7 +201,6 @@ export default function SecretAdminPanel() {
           <div>
             <div className="flex flex-col md:flex-row justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-gray-800 uppercase italic">Pagos Pendientes</h2>
-              {/* TOTAL DE VENTAS CONFIRMADAS */}
               <div className="bg-green-100 text-green-800 px-6 py-3 rounded-xl font-black text-lg shadow-sm border border-green-200">
                 💰 Total Vendido: ${totalSold.toLocaleString('es-MX')}
               </div>
@@ -159,7 +209,6 @@ export default function SecretAdminPanel() {
             <div className="relative mb-6"><Search className="absolute left-3 top-3.5 text-gray-400" size={20}/><input placeholder="Buscar por nombre o teléfono..." className="w-full pl-10 p-3 border-2 rounded-xl outline-none focus:border-blue-500 bg-white" onChange={e => setSearchTerm(e.target.value)}/></div>
             
             <div className="space-y-3">
-              {/* CORRECCIÓN DE ORDENAMIENTO: .sort() */}
               {tickets
                 .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
                 .filter(t => t.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) || t.buyerPhone.includes(searchTerm))
@@ -171,8 +220,20 @@ export default function SecretAdminPanel() {
                     <p className="text-xs text-gray-600 mt-1 bg-white/50 p-2 rounded border border-gray-200 inline-block">🎟️ {t.numbers.join(", ")}</p>
                     <p className="font-black text-xl text-blue-900 mt-2">${t.total} <span className="text-xs font-normal text-gray-500 uppercase">MXN</span></p>
                   </div>
-                  <div className="flex gap-3 w-full md:w-auto">
-                    {t.status === 'reserved' ? <><button onClick={() => handleApprove(t.id!)} className="flex-1 md:flex-none bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><Check size={20}/> Aprobar</button><button onClick={() => handleReject(t)} className="flex-1 md:flex-none bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><X size={20}/> Rechazar</button></> : <span className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold border border-green-200 flex items-center gap-2 w-full md:w-auto justify-center"><Check size={16}/> PAGADO</span>}
+                  <div className="flex gap-2 w-full md:w-auto">
+                    <button onClick={() => startEditTicket(t)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Editar"><Edit size={20}/></button>
+                    
+                    {t.status === 'reserved' ? (
+                      <>
+                        <button onClick={() => handleApprove(t.id!)} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><Check size={20}/> Aprobar</button>
+                        <button onClick={() => handleReject(t)} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center justify-center gap-2"><X size={20}/> Rechazar</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold border border-green-200 flex items-center gap-2 justify-center"><Check size={16}/> PAGADO</span>
+                        <button onClick={() => handleReject(t)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100" title="Eliminar boleto vendido"><Trash size={20}/></button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

@@ -38,7 +38,6 @@ export interface TicketData {
   createdAt: any;
 }
 
-// Nueva interfaz para tickets cancelados
 export interface CancelledTicketData extends TicketData {
   originalTicketId: string;
   cancelledAt: any;
@@ -131,25 +130,27 @@ export const deleteRaffle = async (id: string) => { await deleteDoc(doc(db, "raf
 export const getTickets = async () => { const q = query(collection(db, "tickets"), orderBy("createdAt", "desc")); const snap = await getDocs(q); return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as TicketData[]; };
 export const approveTicket = async (id: string) => updateDoc(doc(db, "tickets", id), { status: 'sold' });
 
-// --- MODIFICADO: Guardar en historial antes de borrar ---
+// --- NUEVO: Editar Ticket ---
+export const updateTicket = async (id: string, data: Partial<TicketData>) => {
+  const docRef = doc(db, "tickets", id);
+  await updateDoc(docRef, data);
+};
+
 export const cancelTicket = async (id: string, rId: string, nums: string[]) => { 
   try {
-    // 1. Obtener datos del ticket antes de borrarlo
     const ticketRef = doc(db, "tickets", id);
     const ticketSnap = await getDoc(ticketRef);
     
     if (ticketSnap.exists()) {
       const ticketData = ticketSnap.data();
-      // 2. Guardar en colección de cancelados
       await addDoc(collection(db, "cancelled_tickets"), {
         ...ticketData,
         originalTicketId: id,
         cancelledAt: new Date(),
-        reason: "Falta de pago"
+        reason: "Eliminado por Admin"
       });
     }
 
-    // 3. Borrar y actualizar rifa (lógica original)
     await deleteDoc(ticketRef); 
     await updateDoc(doc(db, "raffles", rId), { 
       takenNumbers: arrayRemove(...nums), 
@@ -161,7 +162,6 @@ export const cancelTicket = async (id: string, rId: string, nums: string[]) => {
   }
 };
 
-// --- NUEVO: Obtener historial de cancelados ---
 export const getCancelledTickets = async () => {
   const q = query(collection(db, "cancelled_tickets"), orderBy("cancelledAt", "desc"));
   const snap = await getDocs(q);
@@ -273,6 +273,20 @@ export const getMyTickets = async (phone: string) => {
   const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); 
   const snap = await getDocs(q); 
   return snap.docs.map(doc => doc.data() as TicketData); 
+};
+
+// --- NUEVO: Buscar por Nombre ---
+export const getTicketsByName = async (name: string) => {
+  // Nota: Firestore es sensible a mayúsculas/minúsculas y no tiene "LIKE" nativo simple.
+  // Buscaremos coincidencia exacta o inicio de cadena si es posible, pero aquí haremos una búsqueda básica.
+  // Para mejor búsqueda, idealmente se normaliza el texto al guardar.
+  // Aquí traemos todo y filtramos en cliente o usamos un índice simple.
+  // Por eficiencia, usaremos where == name por ahora, o sugerimos al usuario ser exacto.
+  // UNA MEJOR OPCIÓN: Traer los recientes y filtrar en JS del lado del cliente en el componente (si no son miles).
+  // Pero para mantenerlo simple y funcional en backend:
+  const q = query(collection(db, "tickets"), where("buyerName", "==", name));
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => doc.data() as TicketData);
 };
 
 export const getTicketByNumber = async (ticketNumber: string) => {

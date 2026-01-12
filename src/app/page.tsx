@@ -140,7 +140,7 @@ function HomeContent() {
                   </div>
                   <div className="p-4 md:p-6 flex flex-col flex-1">
                     <h3 className="font-black text-lg md:text-xl uppercase line-clamp-1 mb-2 text-gray-800 group-hover:text-blue-600 transition">{r.title}</h3>
-                    <p className="text-sm text-gray-500 mb-4">Boletos: <span className="font-bold text-black">{r.ticketsSold}</span></p>
+                    {/* SECCIÓN DE BOLETOS VENDIDOS/DISPONIBLES ELIMINADA AQUÍ */}
                     <div className="mt-auto flex justify-between items-center pt-4 border-t border-gray-100">
                       <span className="text-2xl md:text-3xl font-black text-red-600">${r.price}</span>
                       <span className="bg-blue-900 text-white px-4 py-1 md:px-6 md:py-2 rounded-lg text-xs md:text-sm font-bold shadow hover:bg-blue-800 transition">VER</span>
@@ -156,7 +156,6 @@ function HomeContent() {
           <div key={sec.id} className="bg-white/90 backdrop-blur p-6 md:p-10 rounded-3xl shadow-xl border border-white/50 overflow-hidden">
             {sec.type === 'html' && <div className="prose max-w-none text-gray-700 overflow-x-auto" dangerouslySetInnerHTML={{__html: sec.content || ""}} />}
             
-            {/* CORRECCIÓN: CALENDARIO DINÁMICO */}
             {sec.type === 'calendar' && (
               <div className="flex flex-col items-center w-full">
                 <h3 className="text-2xl md:text-3xl font-black text-blue-900 mb-6 flex items-center gap-3 text-center"><Calendar className="text-red-500" size={28}/> Calendario</h3>
