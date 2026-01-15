@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMyTickets, getTicketByNumber, getRaffleById, getTicketsByName, TicketData, getTickets } from "@/services/raffleService";
+import { getMyTickets, getTicketByNumber, getRaffleById, getTicketsByName, getTickets, TicketData } from "@/services/raffleService";
 import { Ticket, Search, Printer } from "lucide-react";
 
 interface TicketWithRaffleInfo extends TicketData {
@@ -13,40 +13,45 @@ export default function TicketVerifier() {
   const [tickets, setTickets] = useState<TicketWithRaffleInfo[] | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const normalizeText = (text: string) => {
+    return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  };
+
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!queryInput) return alert("Ingresa un dato válido");
     setLoading(true);
+    setTickets(null);
     
     try {
       const cleanInput = queryInput.trim();
+      const cleanInputNorm = normalizeText(cleanInput);
       let results: TicketData[] = [];
       const seenIds = new Set();
 
-      // 1. Buscar por Teléfono (Exacto)
+      // 1. Buscar por Teléfono (Exacto) - AHORA TRAE IDs, ASÍ QUE NO OCULTARÁ COMPRAS MÚLTIPLES
       const byPhone = await getMyTickets(cleanInput);
-      byPhone.forEach(t => { if(!seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
+      byPhone.forEach(t => { if(t.id && !seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
 
-      // 2. Buscar por Número de Boleto
+      // 2. Buscar por Número de Boleto (Exacto)
       if (results.length === 0) {
         const byTicketNum = await getTicketByNumber(cleanInput);
-        byTicketNum.forEach(t => { if(!seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
+        byTicketNum.forEach(t => { if(t.id && !seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
       }
 
-      // 3. Buscar por Nombre (Intento Exacto y luego Búsqueda General si falla)
+      // 3. Buscar por Nombre (Inteligente)
       if (results.length === 0) {
-         // Intento exacto
+         // A. Búsqueda exacta rápida
          const byName = await getTicketsByName(cleanInput);
-         byName.forEach(t => { if(!seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
+         byName.forEach(t => { if(t.id && !seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
          
-         // Si aun no hay nada, hacemos una búsqueda más amplia (traer últimos tickets y filtrar)
-         // Esto es "fallback" para nombres parciales
+         // B. Búsqueda parcial (backup)
          if (results.length === 0 && isNaN(Number(cleanInput))) {
-            const allRecent = await getTickets(); // Esto trae los tickets (limitado por tu servicio si tiene limite, sino cuidado)
+            const allRecent = await getTickets(); 
             const filtered = allRecent.filter(t => 
-              t.buyerName.toLowerCase().includes(cleanInput.toLowerCase())
+              normalizeText(t.buyerName).includes(cleanInputNorm)
             );
-            filtered.forEach(t => { if(!seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
+            filtered.forEach(t => { if(t.id && !seenIds.has(t.id)) { results.push(t); seenIds.add(t.id); } });
          }
       }
       
@@ -62,6 +67,7 @@ export default function TicketVerifier() {
       setTickets(enrichedTickets);
     } catch (error) {
       console.error(error);
+      alert("Error al buscar. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
@@ -177,6 +183,7 @@ export default function TicketVerifier() {
             {tickets.length === 0 ? (
               <div className="text-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                 <p className="text-gray-500 font-bold">No encontramos boletos con ese dato.</p>
+                <p className="text-xs text-gray-400 mt-2">Intenta verificar acentos o usar solo tu número.</p>
               </div>
             ) : (
               <div className="space-y-4">

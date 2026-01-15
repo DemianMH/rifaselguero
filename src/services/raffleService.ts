@@ -130,7 +130,6 @@ export const deleteRaffle = async (id: string) => { await deleteDoc(doc(db, "raf
 export const getTickets = async () => { const q = query(collection(db, "tickets"), orderBy("createdAt", "desc")); const snap = await getDocs(q); return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as TicketData[]; };
 export const approveTicket = async (id: string) => updateDoc(doc(db, "tickets", id), { status: 'sold' });
 
-// --- NUEVO: Editar Ticket ---
 export const updateTicket = async (id: string, data: Partial<TicketData>) => {
   const docRef = doc(db, "tickets", id);
   await updateDoc(docRef, data);
@@ -140,7 +139,6 @@ export const cancelTicket = async (id: string, rId: string, nums: string[]) => {
   try {
     const ticketRef = doc(db, "tickets", id);
     const ticketSnap = await getDoc(ticketRef);
-    
     if (ticketSnap.exists()) {
       const ticketData = ticketSnap.data();
       await addDoc(collection(db, "cancelled_tickets"), {
@@ -150,16 +148,9 @@ export const cancelTicket = async (id: string, rId: string, nums: string[]) => {
         reason: "Eliminado por Admin"
       });
     }
-
     await deleteDoc(ticketRef); 
-    await updateDoc(doc(db, "raffles", rId), { 
-      takenNumbers: arrayRemove(...nums), 
-      ticketsSold: increment(-nums.length) 
-    });
-  } catch (e) {
-    console.error("Error cancelando ticket:", e);
-    throw e;
-  }
+    await updateDoc(doc(db, "raffles", rId), { takenNumbers: arrayRemove(...nums), ticketsSold: increment(-nums.length) });
+  } catch (e) { console.error("Error cancelando ticket:", e); throw e; }
 };
 
 export const getCancelledTickets = async () => {
@@ -173,21 +164,13 @@ export const pickWinner = async () => { return null; };
 export const uploadRaffleImage = uploadImage;
 
 export const reserveTickets = async (
-  raffleId: string, 
-  buyerName: string, 
-  buyerPhone: string, 
-  buyerState: string,
-  quantityPaid: number, 
-  price: number, 
-  digitCount: number, 
-  manualNumbers?: string[], 
-  promotions?: Promotion[]
+  raffleId: string, buyerName: string, buyerPhone: string, buyerState: string,
+  quantityPaid: number, price: number, digitCount: number, 
+  manualNumbers?: string[], promotions?: Promotion[]
 ) => {
-  
   return await runTransaction(db, async (transaction) => {
     const raffleRef = doc(db, "raffles", raffleId);
     const raffleDoc = await transaction.get(raffleRef);
-    
     if (!raffleDoc.exists()) throw "La rifa no existe.";
     
     const raffleData = raffleDoc.data() as RaffleData;
@@ -208,19 +191,14 @@ export const reserveTickets = async (
 
     if (manualNumbers && manualNumbers.length > 0) {
       const conflict = manualNumbers.some(n => takenNumbers.includes(n));
-      if (conflict) {
-        throw new Error("Uno o más números seleccionados ya fueron ganados por otra persona. Por favor intenta de nuevo.");
-      }
+      if (conflict) throw new Error("Uno o más números seleccionados ya fueron ganados. Intenta de nuevo.");
       finalNumbers = [...manualNumbers];
-      
       if (finalNumbers.length < totalTicketsNeeded) {
          const limit = Math.pow(10, digitCount);
          let attempts = 0;
          while (finalNumbers.length < totalTicketsNeeded && attempts < 2000) {
            const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
-           if (!takenNumbers.includes(num) && !finalNumbers.includes(num)) {
-             finalNumbers.push(num);
-           }
+           if (!takenNumbers.includes(num) && !finalNumbers.includes(num)) finalNumbers.push(num);
            attempts++;
          }
       }
@@ -229,64 +207,37 @@ export const reserveTickets = async (
       let attempts = 0;
       while (finalNumbers.length < totalTicketsNeeded && attempts < 5000) {
         const num = Math.floor(Math.random() * limit).toString().padStart(digitCount, '0');
-        if (!takenNumbers.includes(num) && !finalNumbers.includes(num)) {
-          finalNumbers.push(num);
-        }
+        if (!takenNumbers.includes(num) && !finalNumbers.includes(num)) finalNumbers.push(num);
         attempts++;
       }
     }
 
-    if (finalNumbers.length < totalTicketsNeeded) {
-      throw new Error("No se encontraron suficientes números disponibles. Intenta una cantidad menor.");
-    }
+    if (finalNumbers.length < totalTicketsNeeded) throw new Error("No se encontraron suficientes números disponibles.");
 
     const newTicketRef = doc(collection(db, "tickets"));
-    
     transaction.set(newTicketRef, { 
-      raffleId, 
-      buyerName, 
-      buyerPhone, 
-      buyerState,
-      numbers: finalNumbers, 
-      paidCount: quantityPaid, 
-      total: quantityPaid * price, 
-      status: 'reserved', 
-      createdAt: new Date() 
+      raffleId, buyerName, buyerPhone, buyerState, numbers: finalNumbers, 
+      paidCount: quantityPaid, total: quantityPaid * price, status: 'reserved', createdAt: new Date() 
     });
+    transaction.update(raffleRef, { takenNumbers: arrayUnion(...finalNumbers), ticketsSold: increment(finalNumbers.length) });
 
-    transaction.update(raffleRef, { 
-      takenNumbers: arrayUnion(...finalNumbers), 
-      ticketsSold: increment(finalNumbers.length) 
-    });
-
-    return { 
-      id: newTicketRef.id, 
-      numbers: finalNumbers, 
-      total: quantityPaid * price,
-      paidCount: quantityPaid,
-      bonusCount: finalNumbers.length - quantityPaid
-    };
+    return { id: newTicketRef.id, numbers: finalNumbers, total: quantityPaid * price, paidCount: quantityPaid, bonusCount: finalNumbers.length - quantityPaid };
   });
 };
 
+// --- CORREGIDO: SE AGREGA EL ID AL MAPEO ---
 export const getMyTickets = async (phone: string) => { 
   const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); 
   const snap = await getDocs(q); 
-  return snap.docs.map(doc => doc.data() as TicketData); 
+  // ESTA LÍNEA ES LA CLAVE DE LA CORRECCIÓN:
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as TicketData); 
 };
 
-// --- NUEVO: Buscar por Nombre ---
+// --- FUNCIÓN DE BÚSQUEDA POR NOMBRE ---
 export const getTicketsByName = async (name: string) => {
-  // Nota: Firestore es sensible a mayúsculas/minúsculas y no tiene "LIKE" nativo simple.
-  // Buscaremos coincidencia exacta o inicio de cadena si es posible, pero aquí haremos una búsqueda básica.
-  // Para mejor búsqueda, idealmente se normaliza el texto al guardar.
-  // Aquí traemos todo y filtramos en cliente o usamos un índice simple.
-  // Por eficiencia, usaremos where == name por ahora, o sugerimos al usuario ser exacto.
-  // UNA MEJOR OPCIÓN: Traer los recientes y filtrar en JS del lado del cliente en el componente (si no son miles).
-  // Pero para mantenerlo simple y funcional en backend:
   const q = query(collection(db, "tickets"), where("buyerName", "==", name));
   const snap = await getDocs(q);
-  return snap.docs.map(doc => doc.data() as TicketData);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as TicketData);
 };
 
 export const getTicketByNumber = async (ticketNumber: string) => {
