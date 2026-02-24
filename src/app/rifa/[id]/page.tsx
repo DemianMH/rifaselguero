@@ -172,6 +172,7 @@ export default function RaffleDetail() {
                   src={raffle.images[selectedImageIndex]} 
                   alt={raffle.title} 
                   fill 
+                  sizes="(max-width: 768px) 100vw, 50vw"
                   className="object-contain" 
                   priority 
                 />
@@ -186,7 +187,7 @@ export default function RaffleDetail() {
                     onClick={()=>setSelectedImageIndex(i)} 
                     className={`relative w-16 h-16 md:w-20 md:h-20 shrink-0 cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${selectedImageIndex === i ? 'border-blue-900 scale-105' : 'border-transparent opacity-80'}`}
                   >
-                    <Image src={img} alt="" fill className="object-cover"/>
+                    <Image src={img} alt={`Miniatura ${i}`} fill sizes="80px" className="object-cover"/>
                   </div>
                 ))}
               </div>

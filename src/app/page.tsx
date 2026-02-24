@@ -135,7 +135,13 @@ function HomeContent() {
               <Link key={r.id} href={r.status==='active' ? `/rifa/${r.id}` : '/ganadores'} className="block group h-full">
                 <div className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 h-full flex flex-col border border-gray-100">
                   <div className="relative h-48 md:h-56 bg-white border-b border-gray-100">
-                    <Image src={r.images[0]||""} alt="" fill className="object-contain p-2"/>
+                    <Image 
+                      src={r.images[0]||""} 
+                      alt={r.title} 
+                      fill 
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 33vw, 25vw"
+                      className="object-contain p-2"
+                    />
                     {r.status==='active' && <div className="absolute top-3 right-3 bg-yellow-400 text-black px-3 py-1 rounded-full text-xs font-bold shadow-lg flex items-center gap-1"><Timer size={12}/> EN CURSO</div>}
                   </div>
                   <div className="p-4 md:p-6 flex flex-col flex-1">

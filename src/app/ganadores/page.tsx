@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import { getRaffles, RaffleData } from "@/services/raffleService";
-import { Trophy, Calendar, User, Ticket } from "lucide-react"; // Agregamos iconos
+import { Trophy, Calendar, User, Ticket } from "lucide-react"; 
 import Image from "next/image";
 import Link from "next/link";
 
@@ -58,6 +58,7 @@ export default function WinnersPage() {
                       src={raffle.images[0]} 
                       alt={raffle.title} 
                       fill 
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       className="object-cover grayscale group-hover:grayscale-0 transition-all duration-500" 
                     />
                   ) : (
@@ -86,7 +87,7 @@ export default function WinnersPage() {
                     <span>Finalizó el: {new Date(raffle.endDate).toLocaleDateString()}</span>
                   </div>
                   
-                  {/* Tarjeta del Ganador (AQUÍ ESTABA EL ERROR) */}
+                  {/* Tarjeta del Ganador */}
                   <div className="mt-auto bg-gradient-to-br from-blue-50 to-white p-5 rounded-xl border border-blue-100 text-center shadow-inner">
                     <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Ganador Oficial</p>
                     
