@@ -60,8 +60,15 @@ export default function RaffleDetail() {
 
   const handleSearch = () => {
     if (!raffle) return;
-    const suggestions: string[] = [];
     const digits = raffle.digitCount || 4;
+    
+    // Validación: si escriben más dígitos de lo permitido
+    if (manualSearch.length > digits) {
+        alert(`Solo puedes buscar terminaciones de hasta ${digits} cifras.`);
+        return;
+    }
+
+    const suggestions: string[] = [];
     let attempts = 0;
     while (suggestions.length < 5 && attempts < 50) {
       const prefixLength = digits - manualSearch.length;
@@ -253,7 +260,18 @@ export default function RaffleDetail() {
                 ) : (
                   <div className="space-y-4">
                     <div className="flex gap-2">
-                      <input type="number" placeholder={`Terminación`} value={manualSearch} onChange={(e)=>setManualSearch(e.target.value)} className="flex-1 border-2 p-3 rounded-xl outline-none w-full" />
+                      <input 
+                        type="number" 
+                        placeholder={`Terminación (Máx ${raffle.digitCount || 4})`} 
+                        value={manualSearch} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val.length <= (raffle.digitCount || 4)) {
+                            setManualSearch(val);
+                          }
+                        }} 
+                        className="flex-1 border-2 p-3 rounded-xl outline-none w-full" 
+                      />
                       <button onClick={handleSearch} className="bg-gray-800 text-white p-3 rounded-xl flex-shrink-0"><Search/></button>
                     </div>
                     {manualResults.length>0 && (
@@ -348,7 +366,7 @@ export default function RaffleDetail() {
                   {finalNumbers.map(n => <span key={n} className="bg-gray-100 text-xs font-bold p-1 rounded text-gray-600 border">{n}</span>)}
                 </div>
                 <p className="text-xs text-gray-500 mb-4">Envía el mensaje pre-cargado con tu estado y recuerda poner tu nombre en la transferencia.</p>
-                <a href={`https://wa.me/523326269409?text=${encodeURIComponent(whatsappMsg)}`} target="_blank" className="bg-green-500 text-white px-6 py-4 rounded-xl font-bold block w-full shadow-lg hover:bg-green-600 transition transform hover:scale-105">Enviar WhatsApp</a>
+                <a href={`https://wa.me/52${globalSettings?.whatsapp || "3326269409"}?text=${encodeURIComponent(whatsappMsg)}`} target="_blank" className="bg-green-500 text-white px-6 py-4 rounded-xl font-bold block w-full shadow-lg hover:bg-green-600 transition transform hover:scale-105">Enviar WhatsApp</a>
                 <button onClick={() => setShowSuccessModal(false)} className="mt-4 text-gray-400 underline text-sm">Cerrar</button>
              </motion.div>
           </div>

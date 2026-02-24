@@ -192,6 +192,11 @@ export const reserveTickets = async (
     if (manualNumbers && manualNumbers.length > 0) {
       const conflict = manualNumbers.some(n => takenNumbers.includes(n));
       if (conflict) throw new Error("Uno o más números seleccionados ya fueron ganados. Intenta de nuevo.");
+      
+      // CERRADURA DE SEGURIDAD CONTRA NÚMEROS DE MÁS DÍGITOS
+      const invalidLength = manualNumbers.some(n => n.length > digitCount);
+      if (invalidLength) throw new Error(`Todos los números deben tener máximo ${digitCount} cifras.`);
+      
       finalNumbers = [...manualNumbers];
       if (finalNumbers.length < totalTicketsNeeded) {
          const limit = Math.pow(10, digitCount);
@@ -225,15 +230,12 @@ export const reserveTickets = async (
   });
 };
 
-// --- CORREGIDO: SE AGREGA EL ID AL MAPEO ---
 export const getMyTickets = async (phone: string) => { 
   const q = query(collection(db, "tickets"), where("buyerPhone", "==", phone)); 
   const snap = await getDocs(q); 
-  // ESTA LÍNEA ES LA CLAVE DE LA CORRECCIÓN:
   return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as TicketData); 
 };
 
-// --- FUNCIÓN DE BÚSQUEDA POR NOMBRE ---
 export const getTicketsByName = async (name: string) => {
   const q = query(collection(db, "tickets"), where("buyerName", "==", name));
   const snap = await getDocs(q);
